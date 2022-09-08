@@ -2,7 +2,7 @@
 #
 # Authors: Tom Kralidis <tomkralidis@gmail.com>
 #
-# Copyright (c) 2022 Tom Kralidis
+# Copyright (c) 2020 Tom Kralidis
 #
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -29,8 +29,7 @@
 
 import logging
 
-import pyproj
-from pyproj import CRS, Proj, Transformer
+from pyproj import CRS, Transformer
 import rasterio
 from rasterio.io import MemoryFile
 import rasterio.mask
@@ -38,8 +37,6 @@ import rasterio.mask
 from pygeoapi.provider.base import (BaseProvider, ProviderConnectionError,
                                     ProviderQueryError)
 from pygeoapi.util import read_data
-import shapely
-from functools import partial
 
 LOGGER = logging.getLogger(__name__)
 
@@ -135,7 +132,7 @@ class RasterioProvider(BaseProvider):
 
         for i, dtype, nodataval in zip(self._data.indexes, self._data.dtypes,
                                        self._data.nodatavals):
-            LOGGER.debug(f'Determing rangetype for band {i}')
+            LOGGER.debug('Determing rangetype for band {}'.format(i))
 
             name, units = None, None
             if self._data.units[i-1] is None:
@@ -149,11 +146,12 @@ class RasterioProvider(BaseProvider):
                 'type': 'Quantity',
                 'name': name,
                 'encodingInfo': {
-                    'dataType': f'http://www.opengis.net/def/dataType/OGC/0/{dtype}'  # noqa
+                    'dataType': 'http://www.opengis.net/def/dataType/OGC/0/{}'.format(dtype)  # noqa
                 },
                 'nodata': nodataval,
                 'uom': {
-                    'id': f'http://www.opengis.net/def/uom/UCUM/{units}',
+                    'id': 'http://www.opengis.net/def/uom/UCUM/{}'.format(
+                         units),
                     'type': 'UnitReference',
                     'code': units
                 },
@@ -164,17 +162,13 @@ class RasterioProvider(BaseProvider):
 
         return rangetype
 
-    def query(self, properties=[], subsets={}, bbox=None, bbox_crs=4326,
-              geom=None, geom_crs=4326,
-              datetime_=None, format_='json', **kwargs):
+    def query(self, properties=[], subsets={}, bbox=None, bboxcrs=4326, datetime_=None,
+              format_='json', **kwargs):
         """
-        Extract data from collection
+        Extract data from collection collection
         :param properties: list of bands
         :param subsets: dict of subset names with lists of ranges
         :param bbox: bounding box [minx,miny,maxx,maxy]
-        :param bbox_crs: bounding box crs
-        :param geom: geometry as wkt
-        :param geom_crs: geometry crs
         :param datetime_: temporal (datestamp or extent)
         :param format_: data format of output
 
@@ -182,7 +176,7 @@ class RasterioProvider(BaseProvider):
         """
 
         bands = properties
-        LOGGER.debug(f'Bands: {bands}, subsets: {subsets}')
+        LOGGER.debug('Bands: {}, subsets: {}'.format(bands, subsets))
 
         args = {
             'indexes': None
@@ -203,52 +197,12 @@ class RasterioProvider(BaseProvider):
             LOGGER.warning(msg)
             raise ProviderQueryError(msg)
 
-        if geom:
-            # Load the wkt as a shapes (GeoJSON)
-            shapes = shapely.wkt.loads(geom)
-
-            crs_src = CRS.from_epsg(geom_crs)
-
-            if self.options and 'crs' in self.options:
-                crs_dest = CRS.from_string(self.options['crs'])
-            else:
-                crs_dest = self._data.crs
-
-            if crs_src == crs_dest:
-                LOGGER.debug('source geom CRS and data CRS are the same')
-
-                # Make it as GeoJSON
-                shapes = shapely.geometry.mapping(shapes)
-
-            else:
-                LOGGER.debug('source geom CRS and data CRS are different')
-                LOGGER.debug('reprojecting geom into native coordinates')
-
-                # <2.0 shapely, sample code not working!
-                # Transform
-                #project = partial(pyproj.transform, crs_src, crs_dest)
-                #shapes = shapely.ops.transform(project, shapes)
-
-                # >2.0 shapely
-                # Transform
-                project = Transformer.from_crs(crs_src, crs_dest, always_xy=True)
-                shapes = shapely.ops.transform(project.transform, shapes)
-
-                # Store the bbox representation for rasterio's ouput
-                bbox = shapes.bounds
-
-                # Make it as GeoJSON
-                shapes = shapely.geometry.mapping(shapes)
-
-            # Make it an array
-            shapes = [shapes]
-
-        elif len(bbox) > 0:
+        if len(bbox) > 0:
             minx, miny, maxx, maxy = bbox
 
-            crs_src = CRS.from_epsg(bbox_crs)
+            crs_src = CRS.from_epsg(bboxcrs)
 
-            if 'crs' in self.options:
+            if self.options and 'crs' in self.options:
                 crs_dest = CRS.from_string(self.options['crs'])
             else:
                 crs_dest = self._data.crs
@@ -273,8 +227,10 @@ class RasterioProvider(BaseProvider):
                 minx2, miny2 = t.transform(minx, miny)
                 maxx2, maxy2 = t.transform(maxx, maxy)
 
-                LOGGER.debug(f'Source coordinates: {minx}, {miny}, {maxx}, {maxy}')  # noqa
-                LOGGER.debug(f'Destination: {minx2}, {miny2}, {maxx2}, {maxy2}')  # noqa
+                LOGGER.debug('Source coordinates: {}'.format(
+                    [minx, miny, maxx, maxy]))
+                LOGGER.debug('Destination coordinates: {}'.format(
+                    [minx2, miny2, maxx2, maxy2]))
 
                 shapes = [{
                    'type': 'Polygon',
@@ -320,7 +276,7 @@ class RasterioProvider(BaseProvider):
 
             if shapes:  # spatial subset
                 try:
-                    LOGGER.debug('Clipping data spatially')
+                    LOGGER.debug('Clipping data with bbox')
                     out_image, out_transform = rasterio.mask.mask(
                         _data,
                         filled=False,
@@ -415,7 +371,7 @@ class RasterioProvider(BaseProvider):
         else:
             bands_select = metadata['bands']
 
-        LOGGER.debug(f'bands selected: {bands_select}')
+        LOGGER.debug('bands selected: {}'.format(bands_select))
         for bs in bands_select:
             pm = _get_parameter_metadata(
                 self._data.profile['driver'], self._data.tags(bs))
@@ -481,7 +437,10 @@ class RasterioProvider(BaseProvider):
 
         if self._data.crs is not None:
             if self._data.crs.is_projected:
-                properties['bbox_crs'] = f'http://www.opengis.net/def/crs/OGC/1.3/{self._data.crs.to_epsg()}'  # noqa
+                properties['bbox_crs'] = '{}/{}'.format(
+                    'http://www.opengis.net/def/crs/OGC/1.3/',
+                    self._data.crs.to_epsg())
+
                 properties['x_axis_label'] = 'x'
                 properties['y_axis_label'] = 'y'
                 properties['bbox_units'] = self._data.crs.linear_units

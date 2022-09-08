@@ -3,12 +3,9 @@
 # Authors: Jorge Samuel Mendes de Jesus <jorge.dejesus@protonmail.com>
 #          Tom Kralidis <tomkralidis@gmail.com>
 #          Mary Bucknell <mbucknell@usgs.gov>
-#          John A Stevenson <jostev@bgs.ac.uk>
-#          Colin Blackburn <colb@bgs.ac.uk>
 #
 # Copyright (c) 2018 Jorge Samuel Mendes de Jesus
 # Copyright (c) 2021 Tom Kralidis
-# Copyright (c) 2022 John A Stevenson and Colin Blackburn
 #
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -47,24 +44,106 @@
 #  psql -U postgres -h 127.0.0.1 -p 5432 test
 
 import logging
+import json
+import psycopg2
+from psycopg2.sql import SQL, Identifier, Literal
 from pygeoapi.provider.base import BaseProvider, \
     ProviderConnectionError, ProviderQueryError, ProviderItemNotFoundError
 
-from sqlalchemy import create_engine, MetaData, PrimaryKeyConstraint, asc, desc  # noqa
-from sqlalchemy.exc import InvalidRequestError, OperationalError
-from sqlalchemy.ext.automap import automap_base
-from sqlalchemy.orm import Session, load_only
-from sqlalchemy.sql.expression import and_
-from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
-from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID
-from pygeofilter.backends.sqlalchemy.evaluate import to_filter
+from psycopg2.extras import RealDictCursor
 
-import shapely
-from geoalchemy2.shape import to_shape
-
-_ENGINE_STORE = {}
-_TABLE_MODEL_STORE = {}
 LOGGER = logging.getLogger(__name__)
+
+
+class DatabaseConnection:
+    """Database connection class to be used as 'with' statement.
+     The class returns a connection object.
+    """
+
+    def __init__(self, conn_dic, table, properties=[], context="query"):
+        """
+        PostgreSQLProvider Class constructor returning
+
+        :param conn: dictionary with connection parameters
+                    to be used by psycopg2
+            dbname – the database name (database is a deprecated alias)
+            user – user name used to authenticate
+            password – password used to authenticate
+            host – database host address
+             (defaults to UNIX socket if not provided)
+            port – connection port number
+             (defaults to 5432 if not provided)
+            search_path – search path to be used (by order) , normally
+             data is in the public schema, [public],
+             or in a specific schema ["osm", "public"].
+             Note: First we should have the schema
+             being used and then public
+
+        :param table: table name containing the data. This variable is used to
+                assemble column information
+        :param properties: User-specified subset of column names to expose
+        :param context: query or hits, if query then it will determine
+                table column otherwise will not do it
+        :returns: DatabaseConnection
+        """
+
+        self.conn_dic = conn_dic
+        self.table = table
+        self.context = context
+        self.columns = None
+        self.properties = properties
+        self.fields = {}  # Dict of columns. Key is col name, value is type
+        self.conn = None
+
+    def __enter__(self):
+        try:
+            search_path = self.conn_dic.pop('search_path', ['public'])
+            if search_path != ['public']:
+                self.conn_dic["options"] = '-c \
+                search_path={}'.format(",".join(search_path))
+                LOGGER.debug('Using search path: {} '.format(search_path))
+            self.conn = psycopg2.connect(**self.conn_dic)
+            self.conn.set_client_encoding('utf8')
+
+        except psycopg2.OperationalError:
+            LOGGER.error("Couldn't connect to Postgis using:{}".format(
+                str(self.conn_dic)))
+            raise ProviderConnectionError()
+
+        self.cur = self.conn.cursor()
+        if self.context == 'query':
+            # Get table column names and types, excluding geometry and
+            # transaction ID columns
+            query_cols = """
+            SELECT
+                attr.attname,
+                tp.typname
+            FROM pg_catalog.pg_attribute as attr
+            INNER JOIN pg_catalog.pg_type as tp
+                ON tp.oid = attr.atttypid
+            WHERE
+                attr.attrelid = %s::regclass::oid
+                AND tp.typname != 'geometry'
+                AND attnum > 0
+            """
+
+            #self.cur.execute(query_cols, (self.table,))
+            self.cur.execute(query_cols, ('"' + self.table + '"',))
+            result = self.cur.fetchall()
+            if self.properties:
+                result = [res for res in result if res[0] in self.properties]
+            self.columns = SQL(', ').join(
+                [Identifier(item[0]) for item in result]
+                )
+
+            for k, v in dict(result).items():
+                self.fields[k] = {'type': v}
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # some logic to commit/rollback
+        self.conn.close()
 
 
 class PostgreSQLProvider(BaseProvider):
@@ -72,6 +151,7 @@ class PostgreSQLProvider(BaseProvider):
     using sync approach and server side
     cursor (using support class DatabaseCursor)
     """
+
     def __init__(self, provider_def):
         """
         PostgreSQLProvider Class constructor
@@ -83,35 +163,89 @@ class PostgreSQLProvider(BaseProvider):
 
         :returns: pygeoapi.provider.base.PostgreSQLProvider
         """
-        LOGGER.debug('Initialising PostgreSQL provider.')
+
         super().__init__(provider_def)
 
         self.table = provider_def['table']
         self.id_field = provider_def['id_field']
+        self.conn_dic = provider_def['data']
         self.geom = provider_def.get('geom_field', 'geom')
 
-        LOGGER.debug('Name: {}'.format(self.name))
-        LOGGER.debug('Table: {}'.format(self.table))
-        LOGGER.debug('ID field: {}'.format(self.id_field))
-        LOGGER.debug('Geometry field: {}'.format(self.geom))
+        LOGGER.debug('Setting Postgresql properties:')
+        LOGGER.debug('Connection String:{}'.format(
+            ",".join(("{}={}".format(*i) for i in self.conn_dic.items()))))
+        LOGGER.debug('Name:{}'.format(self.name))
+        LOGGER.debug('ID_field:{}'.format(self.id_field))
+        LOGGER.debug('Table:{}'.format(self.table))
 
-        # Read table information from database
-        self._store_db_parameters(provider_def['data'])
-        self._engine, self.table_model = self._get_engine_and_table_model()
-        LOGGER.debug('DB connection: {}'.format(repr(self._engine.url)))
+        LOGGER.debug('Get available fields/properties')
+        self.get_fields()
 
-        # Read the table fields
-        self.fields = self.get_fields()
-        LOGGER.debug('Fields: {}'.format(self.fields))
+    def get_fields(self):
+        """
+        Get fields from PostgreSQL table (columns are field)
 
-        # Read the table SRID
-        self.srid = self.get_srid()
-        LOGGER.debug('SRID: {}'.format(self.srid))
+        :returns: dict of fields
+        """
+        if not self.fields:
+            with DatabaseConnection(self.conn_dic,
+                                    self.table,
+                                    properties=self.properties) as db:
+                self.fields = db.fields
+        return self.fields
+
+    def __get_where_clauses(self, properties=[], geom_wkt=None, geom_crs=None, data_crs=None):
+        """
+        Generarates WHERE conditions to be implemented in query.
+        Private method mainly associated with query method
+        :param properties: list of tuples (name, value)
+        :param geom_wkt: the geometry to build the clause with
+
+        :returns: psycopg2.sql.Composed or psycopg2.sql.SQL
+        """
+        
+        where_conditions = []
+        if properties:
+            property_clauses = [SQL('{} = {}').format(
+                Identifier(k), Literal(v)) for k, v in properties]
+            where_conditions += property_clauses
+
+        if geom_wkt and data_crs:
+            geom_clause = SQL('ST_Intersects({}, ST_Transform(ST_PolygonFromText({}, ' + str(geom_crs) + '), ' + str(data_crs) + '))').format(
+                Identifier(self.geom), Literal(geom_wkt))
+            where_conditions.append(geom_clause)
+
+        elif geom_wkt:
+            geom_clause = SQL('ST_Intersects({}, ST_PolygonFromText({}, ' + str(geom_crs) + '))').format(
+                Identifier(self.geom), Literal(geom_wkt))
+            where_conditions.append(geom_clause)
+
+        if where_conditions:
+            where_clause = SQL(' WHERE {}').format(
+                SQL(' AND ').join(where_conditions))
+
+        else:
+            where_clause = SQL('')
+
+        return where_clause
+
+    def _make_orderby(self, sortby):
+        """
+        Private function: Make STA filter from query properties
+
+        :param sortby: list of dicts (property, order)
+
+        :returns: STA $orderby string
+        """
+        ret = []
+        _map = {'+': 'ASC', '-': 'DESC'}
+        for _ in sortby:
+            ret.append(f"{_['property']} {_map[_['order']]}")
+        return SQL(f"ORDER BY {','.join(ret)}")
 
     def query(self, offset=0, limit=10, resulttype='results',
-              bbox=[], bbox_crs=None, datetime_=None, properties=[], sortby=[],
-              select_properties=[], skip_geometry=False, q=None,
-              filterq=None, **kwargs):
+              bbox=None, bbox_crs=None, geom_wkt=None, geom_crs=None, data_crs=None, datetime_=None, properties=[], sortby=[],
+              select_properties=[], skip_geometry=False, q=None, **kwargs):
         """
         Query Postgis for all the content.
         e,g: http://localhost:5000/collections/hotosm_bdi_waterways/items?
@@ -121,89 +255,144 @@ class PostgreSQLProvider(BaseProvider):
         :param limit: number of records to return (default 10)
         :param resulttype: return results or hit limit (default results)
         :param bbox: bounding box [minx,miny,maxx,maxy]
-        :param bbox_crs: bounding box crs (default unspecified)
+        :param bbox_crs: the spatial projection of the provided bounding box
+        :param geom_wkt: the geom wkt
+        :param geom_crs: the spatial projection of the provided geom wkt
+        :param data_crs: the spatial projection of the data being queried
         :param datetime_: temporal (datestamp or extent)
         :param properties: list of tuples (name, value)
         :param sortby: list of dicts (property, order)
         :param select_properties: list of property names
         :param skip_geometry: bool of whether to skip geometry (default False)
         :param q: full-text search term(s)
-        :param filterq: CQL query as text string
 
         :returns: GeoJSON FeaturesCollection
         """
         LOGGER.debug('Querying PostGIS')
 
-        # Prepare filters
-        property_filters = self._get_property_filters(properties)
-        cql_filters = self._get_cql_filters(filterq)
-        bbox_filter = self._get_bbox_filter(bbox, bbox_crs)
-        order_by_clauses = self._get_order_by_clauses(sortby, self.table_model)
-        selected_properties = self._select_properties_clause(select_properties,
-                                                             skip_geometry)
+        if not geom_wkt and bbox:
+            # Transform bbox to polygon wkt
+            geom_wkt = "POLYGON(({x_min} {y_min}, {x_min} {y_max}, {x_max} {y_max}, {x_max} {y_min}, {x_min} {y_min}))".format(
+                x_min=bbox[0],
+                y_min=bbox[1],
+                x_max=bbox[2],
+                y_max=bbox[3])
+            geom_crs = bbox_crs
 
-        # Execute query within self-closing database Session context
-        with Session(self._engine) as session:
-            results = (session.query(self.table_model)
-                       .filter(property_filters)
-                       .filter(cql_filters)
-                       .filter(bbox_filter)
-                       .order_by(*order_by_clauses)
-                       .options(selected_properties)
-                       .offset(offset))
+        if resulttype == 'hits':
 
-            # Prepare and return feature collection response
-            response = {
+            with DatabaseConnection(self.conn_dic,
+                                    self.table,
+                                    properties=self.properties,
+                                    context="hits") as db:
+                cursor = db.conn.cursor(cursor_factory=RealDictCursor)
+
+                where_clause = self.__get_where_clauses(
+                    properties=properties, geom_wkt=geom_wkt, geom_crs=geom_crs, data_crs=data_crs)
+
+                sql_query = SQL("SELECT COUNT(*) as hits from {} {}").\
+                    format(Identifier(self.table), where_clause)
+                try:
+                    cursor.execute(sql_query)
+                except Exception as err:
+                    LOGGER.error('Error executing sql_query: {}: {}'.format(
+                        sql_query.as_string(cursor), err))
+                    raise ProviderQueryError()
+
+                hits = cursor.fetchone()["hits"]
+
+            return self.__response_feature_hits(hits)
+
+        end_index = offset + limit
+
+        with DatabaseConnection(self.conn_dic,
+                                self.table,
+                                properties=self.properties) as db:
+            cursor = db.conn.cursor(cursor_factory=RealDictCursor)
+
+            props = db.columns if select_properties == [] else \
+                SQL(', ').join([Identifier(p) for p in select_properties])
+
+            geom = SQL('') if skip_geometry else \
+                SQL(",ST_AsGeoJSON({})").format(Identifier(self.geom))
+
+            where_clause = self.__get_where_clauses(
+                properties=properties, geom_wkt=geom_wkt, geom_crs=geom_crs, data_crs=data_crs)
+
+            orderby = self._make_orderby(sortby) if sortby else SQL('')
+
+            sql_query = SQL("DECLARE \"geo_cursor\" CURSOR FOR \
+             SELECT DISTINCT {} {} FROM {} {} {}").\
+                format(props,
+                       geom,
+                       Identifier(self.table),
+                       where_clause,
+                       orderby)
+
+            LOGGER.debug('SQL Query: {}'.format(sql_query.as_string(cursor)))
+            LOGGER.debug('Start Index: {}'.format(offset))
+            LOGGER.debug('End Index: {}'.format(end_index))
+            try:
+                cursor.execute(sql_query)
+                for index in [offset, limit]:
+                    cursor.execute("fetch forward {} from geo_cursor"
+                                   .format(index))
+            except Exception as err:
+                LOGGER.error('Error executing sql_query: {}'.format(
+                    sql_query.as_string(cursor)))
+                LOGGER.error(err)
+                raise ProviderQueryError()
+
+            row_data = cursor.fetchall()
+
+            feature_collection = {
                 'type': 'FeatureCollection',
                 'features': []
             }
 
-            if resulttype == "hits":
-                # User requested hit count
-                response['numberMatched'] = results.count()
-                return response
+            for rd in row_data:
+                feature_collection['features'].append(
+                    self.__response_feature(rd))
 
-            if not results:
-                # Empty response
-                return response
+            return feature_collection
 
-            for item in results.limit(limit):
-                response['features'].append(
-                    self._sqlalchemy_to_feature(item)
-                )
-
-        return response
-
-    def get_fields(self):
+    def get_previous(self, cursor, identifier):
         """
-        Return fields (columns) from PostgreSQL table
+        Query previous ID given current ID
 
-        :returns: dict of fields
+        :param identifier: feature id
+
+        :returns: feature id
         """
-        LOGGER.debug('Get available fields/properties')
+        sql = 'SELECT {} AS id FROM {} WHERE {}<%s ORDER BY {} DESC LIMIT 1'
+        cursor.execute(SQL(sql).format(
+            Identifier(self.id_field),
+            Identifier(self.table),
+            Identifier(self.id_field),
+            Identifier(self.id_field),
+        ), (identifier,))
+        item = cursor.fetchall()
+        id_ = item[0]['id'] if item else identifier
+        return id_
 
-        fields = {}
-        for column in self.table_model.__table__.columns:
-            fields[str(column.name)] = {'type': str(column.type)}
-
-        fields.pop(self.geom)  # Exclude geometry column
-
-        return fields
-
-    def get_srid(self):
+    def get_next(self, cursor, identifier):
         """
-        Return the srid of the underlying table
+        Query next ID given current ID
 
-        :returns: integer of the SRID
+        :param identifier: feature id
+
+        :returns: feature id
         """
-        LOGGER.debug('Get SRID')
-
-        # Execute query within self-closing database Session context
-        srid = None
-        with Session(self._engine) as session:
-            srid = session.scalar(
-                       Find_SRID(self.schema, self.table, self.geom))
-        return srid
+        sql = 'SELECT {} AS id FROM {} WHERE {}>%s ORDER BY {} LIMIT 1'
+        cursor.execute(SQL(sql).format(
+            Identifier(self.id_field),
+            Identifier(self.table),
+            Identifier(self.id_field),
+            Identifier(self.id_field),
+        ), (identifier,))
+        item = cursor.fetchall()
+        id_ = item[0]['id'] if item else identifier
+        return id_
 
     def get(self, identifier, **kwargs):
         """
@@ -214,229 +403,80 @@ class PostgreSQLProvider(BaseProvider):
 
         :returns: GeoJSON FeaturesCollection
         """
-        LOGGER.debug(f'Get item by ID: {identifier}')
 
-        # Execute query within self-closing database Session context
-        with Session(self._engine) as session:
-            # Retrieve data from database as feature
-            query = session.query(self.table_model)
-            item = query.get(identifier)
-            if item is None:
-                msg = f"No such item: {self.id_field}={identifier}."
-                raise ProviderItemNotFoundError(msg)
-            feature = self._sqlalchemy_to_feature(item)
+        LOGGER.debug('Get item from Postgis')
+        with DatabaseConnection(self.conn_dic,
+                                self.table,
+                                properties=self.properties) as db:
+            cursor = db.conn.cursor(cursor_factory=RealDictCursor)
 
-            # Add fields for previous and next items
-            id_field = getattr(self.table_model, self.id_field)
-            prev_item = (session.query(self.table_model)
-                         .order_by(id_field.desc())
-                         .filter(id_field < identifier)
-                         .first())
-            next_item = (session.query(self.table_model)
-                         .order_by(id_field.asc())
-                         .filter(id_field > identifier)
-                         .first())
-            feature['prev'] = (getattr(prev_item, self.id_field)
-                               if prev_item is not None else identifier)
-            feature['next'] = (getattr(next_item, self.id_field)
-                               if next_item is not None else identifier)
+            sql_query = SQL("SELECT {},ST_AsGeoJSON({}) \
+            from {} WHERE {}=%s").format(db.columns,
+                                         Identifier(self.geom),
+                                         Identifier(self.table),
+                                         Identifier(self.id_field))
 
-        return feature
-
-    def _store_db_parameters(self, parameters):
-        self.db_user = parameters.get('user')
-        self.db_host = parameters.get('host')
-        self.db_port = parameters.get('port', 5432)
-        self.db_name = parameters.get('dbname')
-        self.db_search_path = parameters.get('search_path', ['public'])
-        self.schema = self.db_search_path[0]
-        self._db_password = parameters.get('password')
-
-    def _get_engine_and_table_model(self):
-        """
-        Create a SQL Alchemy engine for the database and reflect the table
-        model.  Use existing versions from stores if available to allow reuse
-        of Engine connection pool and save expensive table reflection.
-        """
-        # One long-lived engine is used per database URL:
-        # https://docs.sqlalchemy.org/en/14/core/connections.html#basic-usage
-        engine_store_key = (self.db_user, self.db_host, self.db_port,
-                            self.db_name)
-        try:
-            engine = _ENGINE_STORE[engine_store_key]
-        except KeyError:
-            conn_str = (
-                'postgresql+psycopg2://'
-                f'{self.db_user}:{self._db_password}@'
-                f'{self.db_host}:{self.db_port}/'
-                f'{self.db_name}'
-            )
-            engine = create_engine(
-                conn_str,
-                connect_args={'client_encoding': 'utf8',
-                              'application_name': 'pygeoapi'},
-                pool_pre_ping=True)
-            _ENGINE_STORE[engine_store_key] = engine
-
-        # Reuse table model if one exists
-        table_model_store_key = (self.db_host, self.db_port, self.db_name,
-                                 self.table)
-        try:
-            table_model = _TABLE_MODEL_STORE[table_model_store_key]
-        except KeyError:
-            table_model = self._reflect_table_model(engine)
-            _TABLE_MODEL_STORE[table_model_store_key] = table_model
-
-        return engine, table_model
-
-    def _reflect_table_model(self, engine):
-        """
-        Reflect database metadata to create a SQL Alchemy model corresponding
-        to target table.  This requires a database query and is expensive to
-        perform.
-        """
-        metadata = MetaData(engine)
-
-        # Look for table in the first schema in the search path
-        try:
-            metadata.reflect(schema=self.schema, only=[self.table], views=True)
-        except OperationalError:
-            msg = (f"Could not connect to {repr(engine.url)} "
-                   "(password hidden).")
-            raise ProviderConnectionError(msg)
-        except InvalidRequestError:
-            msg = (f"Table '{self.table}' not found in schema '{self.schema}' "
-                   f"on {repr(engine.url)}.")
-            raise ProviderQueryError(msg)
-
-        # Create SQLAlchemy model from reflected table
-        # It is necessary to add the primary key constraint because SQLAlchemy
-        # requires it to reflect the table, but a view in a PostgreSQL database
-        # does not have a primary key defined.
-        sqlalchemy_table_def = metadata.tables[f'{self.schema}.{self.table}']
-
-        try:
-            sqlalchemy_table_def.append_constraint(
-                PrimaryKeyConstraint(self.id_field)
-            )
-        except KeyError:
-            msg = (f"No such id_field column ({self.id_field}) on "
-                   f"{self.schema}.{self.table}.")
-            raise ProviderQueryError(msg)
-
-        Base = automap_base(metadata=metadata)
-        Base.prepare()
-        TableModel = getattr(Base.classes, self.table)
-
-        return TableModel
-
-    def _sqlalchemy_to_feature(self, item):
-        feature = {
-            'type': 'Feature'
-        }
-
-        # Add properties from item
-        item_dict = item.__dict__
-        item_dict.pop('_sa_instance_state')  # Internal SQLAlchemy metadata
-        feature['properties'] = item_dict
-        feature['id'] = item_dict.pop(self.id_field)
-
-        # Convert geometry to GeoJSON style
-        if feature['properties'].get(self.geom):
-            wkb_geom = feature['properties'].pop(self.geom)
-            shapely_geom = to_shape(wkb_geom)
-            geojson_geom = shapely.geometry.mapping(shapely_geom)
-            feature['geometry'] = geojson_geom
-        else:
-            feature['geometry'] = None
-
-        return feature
-
-    def _get_order_by_clauses(self, sort_by, table_model):
-        # Build sort_by clauses if provided
-        clauses = []
-        for sort_by_dict in sort_by:
-            model_column = getattr(table_model, sort_by_dict['property'])
-            order_function = asc if sort_by_dict['order'] == '+' else desc
-            clauses.append(order_function(model_column))
-
-        # Otherwise sort by primary key (to ensure reproducible output)
-        if not clauses:
-            clauses.append(asc(getattr(table_model, self.id_field)))
-
-        return clauses
-
-    def _get_cql_filters(self, filterq):
-        if not filterq:
-            return True  # Let everything through
-
-        # Convert filterq into SQL Alchemy filters
-        field_mapping = {
-            column_name: getattr(self.table_model, column_name)
-            for column_name in self.table_model.__table__.columns.keys()}
-        cql_filters = to_filter(filterq, field_mapping)
-
-        return cql_filters
-
-    def _get_property_filters(self, properties):
-        if not properties:
-            return True  # Let everything through
-
-        # Convert property filters into SQL Alchemy filters
-        # Based on https://stackoverflow.com/a/14887813/3508733
-        filter_group = []
-        for column_name, value in properties:
-            column = getattr(self.table_model, column_name)
-            filter_group.append(column == value)
-        property_filters = and_(*filter_group)
-
-        return property_filters
-
-    def _get_bbox_filter(self, bbox, bbox_crs):
-        if not bbox:
-            return True  # Let everything through
-
-        # If a bbox_crs is specified
-        if bbox_crs:
-            # Append the srid to the bbox coordinates
-            bbox.append(int(bbox_crs))
-            # Make the bbox envelope
-            envelope = ST_MakeEnvelope(*bbox)
-            # Project the bbox's to the SRID of the table
-            envelope = ST_Transform(envelope, self.srid)
-
-        else:
-            # Make the bbox envelope assuming the same crs as the data
-            envelope = ST_MakeEnvelope(*bbox)
-
-        geom_column = getattr(self.table_model, self.geom)
-        bbox_filter = geom_column.intersects(envelope)
-
-        return bbox_filter
-
-    def _select_properties_clause(self, select_properties, skip_geometry):
-        # List the column names that we want
-        if select_properties:
-            column_names = set(select_properties)
-        else:
-            # get_fields() doesn't include geometry column
-            column_names = set(self.fields.keys())
-
-        if self.properties:  # optional subset of properties defined in config
-            properties_from_config = set(self.properties)
-            column_names = column_names.intersection(properties_from_config)
-
-        if not skip_geometry:
-            column_names.add(self.geom)
-
-        # Convert names to SQL Alchemy clause
-        selected_columns = []
-        for column_name in column_names:
+            LOGGER.debug('SQL Query: {}'.format(sql_query.as_string(db.conn)))
+            LOGGER.debug('Identifier: {}'.format(identifier))
             try:
-                column = getattr(self.table_model, column_name)
-                selected_columns.append(column)
-            except AttributeError:
-                pass  # Ignore non-existent columns
-        selected_properties_clause = load_only(*selected_columns)
+                cursor.execute(sql_query, (identifier, ))
+            except Exception as err:
+                LOGGER.error('Error executing sql_query: {}'.format(
+                    sql_query.as_string(cursor)))
+                LOGGER.error(err)
+                raise ProviderQueryError()
 
-        return selected_properties_clause
+            results = cursor.fetchall()
+            row_data = None
+            if results:
+                row_data = results[0]
+            feature = self.__response_feature(row_data)
+
+            if feature:
+                feature['prev'] = self.get_previous(cursor, identifier)
+                feature['next'] = self.get_next(cursor, identifier)
+                return feature
+            else:
+                err = 'item {} not found'.format(identifier)
+                LOGGER.error(err)
+                raise ProviderItemNotFoundError(err)
+
+    def __response_feature(self, row_data):
+        """
+        Assembles GeoJSON output from DB query
+
+        :param row_data: DB row result
+
+        :returns: `dict` of GeoJSON Feature
+        """
+
+        if row_data:
+            rd = dict(row_data)
+            feature = {
+                'type': 'Feature'
+            }
+
+            geom = rd.pop('st_asgeojson') if rd.get('st_asgeojson') else None
+
+            feature['geometry'] = json.loads(geom) if geom is not None else None  # noqa
+
+            feature['properties'] = rd
+            feature['id'] = feature['properties'].get(self.id_field)
+
+            return feature
+        else:
+            return None
+
+    def __response_feature_hits(self, hits):
+        """Assembles GeoJSON/Feature number
+        e.g: http://localhost:5000/collections/
+        hotosm_bdi_waterways/items?resulttype=hits
+
+        :returns: GeoJSON FeaturesCollection
+        """
+
+        feature_collection = {"features": [],
+                              "type": "FeatureCollection"}
+        feature_collection['numberMatched'] = hits
+
+        return feature_collection
