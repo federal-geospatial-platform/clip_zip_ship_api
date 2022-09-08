@@ -711,6 +711,113 @@ class API:
         self.manager = load_plugin('process_manager', manager_def)
         LOGGER.info('Process manager plugin loaded')
 
+        # Now that basic configuration is read, call the load ressources
+        self.on_load_resources()
+
+        
+    def on_load_resources(self): # HACK: ALEX
+        
+        # Override this function to load the ressources dynamically in the self.config['resources'] node.
+        return None
+
+    def on_describe_collections(self, collections, geom_wkt, geom_crs): # HACK: ALEX
+
+        # Override this function to load more collections in the array.
+        # Default, returns the same collections object, unchanged.
+        return collections
+
+    def on_build_collection_finalize(self, locale, collection_data_type, input_coll, active_coll): # HACK: ALEX
+        # Do nothing
+        return None
+
+    def on_filter_spatially(self, collections, geom_wkt, geom_crs): # HACK: ALEX
+
+        # Override this function to change the way the filtering by bbox works.
+        # Default, returns the same collections object, unfiltered.
+        return collections
+
+    def read_bbox(self, request: Union[APIRequest, Any], method: str):
+        # Depending on the method
+        q_bbox = None
+        
+        if method == 'GET':
+            q_bbox = request.params.get('bbox')
+            q_bbox = validate_bbox(q_bbox)
+        
+        elif method == 'POST':
+            d = request._data
+            if d:
+                d = d.decode().replace("'", '"')
+                d = json.loads(d)
+                if 'bbox' in d:
+                    q_bbox = d['bbox']
+                    q_bbox = validate_bbox(q_bbox)
+        return q_bbox
+
+    def read_input(self, request: Union[APIRequest, Any], method: str, param_name: str):
+        # Depending on the method
+        result = None
+        
+        if method == 'GET':
+            result = request.params.get(param_name)
+
+        elif method == 'POST':
+            d = request._data
+            if d:
+                d = d.decode().replace("'", '"')
+                d = json.loads(d)
+                if param_name in d:
+                    result = d[param_name]
+        return result
+
+    def read_spatial_filter(self, request: Union[APIRequest, Any], method: str):
+        # Read the geometry if any
+        geom = self.read_input(request, method, 'geom')
+
+        # Read the geometry crs if any
+        geomcrs = self.read_input(request, method, 'geom-crs') or 4326
+
+        # If no geom_wkt
+        bbox = None
+        bboxcrs = None
+        if not geom:
+            # Read the bbox if any
+            bbox = self.read_bbox(request, method)
+
+            # Read the bboxcrs if any
+            bboxcrs = self.read_input(request, method, 'bbox-crs') or 4326
+
+            # If a bbox is set
+            if bbox:
+                # Transform bbox to polygon wkt
+                geom = "POLYGON(({x_min} {y_min}, {x_min} {y_max}, {x_max} {y_max}, {x_max} {y_min}, {x_min} {y_min}))".format(
+                    x_min=bbox[0],
+                    y_min=bbox[1],
+                    x_max=bbox[2],
+                    y_max=bbox[3])
+                geomcrs = bboxcrs
+
+        return geom, geomcrs, bbox, bboxcrs
+
+    @pre_process
+    @jsonldify
+    def reload_resources(self, request: Union[APIRequest, Any]) -> Tuple[dict, int, str]:
+        
+        """
+        HACK: ALEX: New function to regenerate the self.config object from the database
+
+        :param request: A request object
+
+        :returns: tuple of headers, status code, content
+        """
+        
+        headers = request.get_response_headers()
+
+        # Reinitialize the configuration
+        self.on_load_resources()
+       
+        return headers, 200, to_json({"reloaded": True}, self.pretty_print)
+
     @gzip
     @pre_process
     @jsonldify
@@ -892,7 +999,7 @@ class API:
     @gzip
     @pre_process
     @jsonldify
-    def describe_collections(self, request: Union[APIRequest, Any],
+    def describe_collections(self, request: Union[APIRequest, Any], method: str,
                              dataset=None) -> Tuple[dict, int, str]:
         """
         Provide collection metadata
@@ -914,6 +1021,26 @@ class API:
 
         collections = filter_dict_by_key_value(self.config['resources'],
                                                'type', 'collection')
+
+        geom = None
+        geomcrs = None
+        bbox = None
+        bboxcrs = None
+        try:
+            # Read the spatial filter parameters from the request
+            geom, geomcrs, bbox, bboxcrs = self.read_spatial_filter(request, method)
+
+        except ValueError as err:
+            msg = str(err)
+            return self.get_exception(
+                400, headers, request.format, 'InvalidParameterValue', msg)
+
+        # Describe more collections
+        collections = self.on_describe_collections(collections, geom, geomcrs)
+
+        # Filter by bbox
+        collections = self.on_filter_spatially(collections, geom, geomcrs or 4326)
+
 
         if all([dataset is not None, dataset not in collections.keys()]):
             msg = 'Collection not found'
@@ -1021,9 +1148,9 @@ class API:
                     self.get_collections_url(), k, F_HTML)
             })
 
+            collection['itemType'] = collection_data_type
             if collection_data_type in ['feature', 'record', 'tile']:
                 # TODO: translate
-                collection['itemType'] = collection_data_type
                 LOGGER.debug('Adding feature/record based links')
                 collection['links'].append({
                     'type': FORMAT_TYPES[F_JSON],
@@ -1201,6 +1328,9 @@ class API:
                         500, headers, request.format, 'NoApplicableCode', msg)
                 except ProviderTypeError:
                     pass
+
+            # Finalize building the collection information
+            self.on_build_collection_finalize(request.locale, collection_data_type, v, collection)
 
             if dataset is not None and k == dataset:
                 fcm = collection
@@ -1543,6 +1673,11 @@ class API:
         # Get provider locale (if any)
         prv_locale = l10n.get_plugin_locale(provider_def, request.raw_locale)
 
+        # Get crs of the data
+        datacrs = None
+        if 'crs' in provider_def:
+            datacrs = provider_def["crs"]
+
         LOGGER.debug('Querying provider')
         LOGGER.debug('offset: {}'.format(offset))
         LOGGER.debug('limit: {}'.format(limit))
@@ -1561,7 +1696,8 @@ class API:
 
         try:
             content = p.query(offset=offset, limit=limit,
-                              resulttype=resulttype, bbox=bbox,
+                              resulttype=resulttype, bbox=bbox, bbox_crs=bboxcrs,
+                              geom_wkt=geom, geom_crs=geomcrs, data_crs=datacrs,
                               bbox_crs=bbox_crs,
                               datetime_=datetime_, properties=properties,
                               sortby=sortby,
@@ -1676,6 +1812,7 @@ class API:
                                          'collections/items/index.html',
                                          content, request.locale)
             return headers, 200, content
+
         elif request.format == 'csv':  # render
             formatter = load_plugin('formatter',
                                     {'name': 'CSV', 'geom': True})
@@ -1800,6 +1937,7 @@ class API:
             msg = str(err)
             return self.get_exception(
                 400, headers, request.format, 'InvalidParameterValue', msg)
+
 
         LOGGER.debug('Processing datetime parameter')
         datetime_ = request.params.get('datetime')

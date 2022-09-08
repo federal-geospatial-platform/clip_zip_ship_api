@@ -16,27 +16,9 @@ URL_GEO_NETWORK = {
     "METADATA": "gmd:MD_Metadata",
     "FILE_IDENTIFIER": "gmd:fileIdentifier",
     "LANGUAGE": "gmd:language",
-    "REFERENCE_SYSTEM_INFO": "gmd:referenceSystemInfo",
-    "REFERENCE_SYSTEM_IDENTIF": "gmd:MD_ReferenceSystem",
-    "RS_IDENT": "gmd:referenceSystemIdentifier",
-    "RS_IDENTIF": "gmd:RS_Identifier",
-    "RS_IDENTIF_CODE": "gmd:code",
     "IDENTIFY_INFO": "gmd:identificationInfo",
     "DISTRIBUTION_INFO": "gmd:distributionInfo",
     "DATA_IDENTIFY": "gmd:MD_DataIdentification",
-    "EXTENT": "gmd:extent",
-    "EX_EXTENT": "gmd:EX_Extent",
-    "GEOGRAPHIC_ELEMENT": "gmd:geographicElement",
-    "GEOGRAPHIC_BOUNDING_BOX": "gmd:EX_GeographicBoundingBox",
-    "GEOGRAPHIC_BOUNDING_BOX_WEST": "gmd:westBoundLongitude",
-    "GEOGRAPHIC_BOUNDING_BOX_EAST": "gmd:eastBoundLongitude",
-    "GEOGRAPHIC_BOUNDING_BOX_SOUTH": "gmd:southBoundLatitude",
-    "GEOGRAPHIC_BOUNDING_BOX_NORTH": "gmd:northBoundLatitude",
-    "TEMPORAL_ELEMENT": "gmd:temporalElement",
-    "EX_TEMPORAL_EXTENT": "gmd:EX_TemporalExtent",
-    "TIME_PERIOD": "gml:TimePeriod",
-    "BEGIN_POSITION": "gml:beginPosition",
-    "END_POSITION": "gml:endPosition",
     "DISTRIBUTION": "gmd:MD_Distribution",
     "TRANSFER_OPT": "gmd:transferOptions",
     "TRANSFER_DIGITAL": "gmd:MD_DigitalTransferOptions",
@@ -68,8 +50,7 @@ URL_GEO_NETWORK = {
     "KEYWORDS": "gmd:MD_Keywords",
     "KEYWORD": "gmd:keyword",
     "TYPE": "gmd:type",
-    "TYPE_CODE": "gmd:MD_KeywordTypeCode",
-    "DECIMAL": "gco:Decimal"
+    "TYPE_CODE": "gmd:MD_KeywordTypeCode"
 }
 DETERMINANTS_EN = ["a", "an", "the"]
 DETERMINANTS_FR = ["le", "la", "les", "un", "une", "des"]
@@ -96,64 +77,12 @@ class GeoNetworkReader(object):
             self._uuid = _dig_node_one_value(self._meta_root, [URL_GEO_NETWORK["FILE_IDENTIFIER"],
                                                                URL_GEO_NETWORK["CHAR_STRING"]])
 
-            # Grab the spatial reference system
-            self._srid = _dig_node_one_value(self._meta_root, [URL_GEO_NETWORK["REFERENCE_SYSTEM_INFO"],
-                                                               URL_GEO_NETWORK["REFERENCE_SYSTEM_IDENTIF"],
-                                                               URL_GEO_NETWORK["RS_IDENT"],
-                                                               URL_GEO_NETWORK["RS_IDENTIF"],
-                                                               URL_GEO_NETWORK["RS_IDENTIF_CODE"],
-                                                               URL_GEO_NETWORK["CHAR_STRING"]]);
-
             # Grab the information
             self._language = _dig_node_one_value(self._meta_root, [URL_GEO_NETWORK["LANGUAGE"],
                                                                    URL_GEO_NETWORK["CHAR_STRING"]])
             # Grab data identification root
             self._data_identif_root = _dig_node_one(self._meta_root, [URL_GEO_NETWORK["IDENTIFY_INFO"],
                                                                       URL_GEO_NETWORK["DATA_IDENTIFY"]])
-
-            # Grab the extent
-            self._extent = {}
-            self._extent["west"] = _dig_node_one_value(self._data_identif_root, [URL_GEO_NETWORK["EXTENT"],
-                                                                                 URL_GEO_NETWORK["EX_EXTENT"],
-                                                                                 URL_GEO_NETWORK["GEOGRAPHIC_ELEMENT"],
-                                                                                 URL_GEO_NETWORK["GEOGRAPHIC_BOUNDING_BOX"],
-                                                                                 URL_GEO_NETWORK["GEOGRAPHIC_BOUNDING_BOX_WEST"],
-                                                                                 URL_GEO_NETWORK["DECIMAL"]])
-            self._extent["east"] = _dig_node_one_value(self._data_identif_root, [URL_GEO_NETWORK["EXTENT"],
-                                                                                 URL_GEO_NETWORK["EX_EXTENT"],
-                                                                                 URL_GEO_NETWORK["GEOGRAPHIC_ELEMENT"],
-                                                                                 URL_GEO_NETWORK["GEOGRAPHIC_BOUNDING_BOX"],
-                                                                                 URL_GEO_NETWORK["GEOGRAPHIC_BOUNDING_BOX_EAST"],
-                                                                                 URL_GEO_NETWORK["DECIMAL"]])
-            self._extent["south"] = _dig_node_one_value(self._data_identif_root, [URL_GEO_NETWORK["EXTENT"],
-                                                                                  URL_GEO_NETWORK["EX_EXTENT"],
-                                                                                  URL_GEO_NETWORK["GEOGRAPHIC_ELEMENT"],
-                                                                                  URL_GEO_NETWORK["GEOGRAPHIC_BOUNDING_BOX"],
-                                                                                  URL_GEO_NETWORK["GEOGRAPHIC_BOUNDING_BOX_SOUTH"],
-                                                                                  URL_GEO_NETWORK["DECIMAL"]])
-            self._extent["north"] = _dig_node_one_value(self._data_identif_root, [URL_GEO_NETWORK["EXTENT"],
-                                                                                  URL_GEO_NETWORK["EX_EXTENT"],
-                                                                                  URL_GEO_NETWORK["GEOGRAPHIC_ELEMENT"],
-                                                                                  URL_GEO_NETWORK["GEOGRAPHIC_BOUNDING_BOX"],
-                                                                                  URL_GEO_NETWORK["GEOGRAPHIC_BOUNDING_BOX_NORTH"],
-                                                                                  URL_GEO_NETWORK["DECIMAL"]])
-
-            # Grab the time extent
-            self._temporal_extent = {}
-            self._temporal_extent["begin"] = _dig_node_one_value(self._data_identif_root, [URL_GEO_NETWORK["EXTENT"],
-                                                                                           URL_GEO_NETWORK["EX_EXTENT"],
-                                                                                           URL_GEO_NETWORK["TEMPORAL_ELEMENT"],
-                                                                                           URL_GEO_NETWORK["EX_TEMPORAL_EXTENT"],
-                                                                                           URL_GEO_NETWORK["EXTENT"],
-                                                                                           URL_GEO_NETWORK["TIME_PERIOD"],
-                                                                                           URL_GEO_NETWORK["BEGIN_POSITION"]])
-            self._temporal_extent["end"] = _dig_node_one_value(self._data_identif_root, [URL_GEO_NETWORK["EXTENT"],
-                                                                               URL_GEO_NETWORK["EX_EXTENT"],
-                                                                               URL_GEO_NETWORK["TEMPORAL_ELEMENT"],
-                                                                               URL_GEO_NETWORK["EX_TEMPORAL_EXTENT"],
-                                                                               URL_GEO_NETWORK["EXTENT"],
-                                                                               URL_GEO_NETWORK["TIME_PERIOD"],
-                                                                               URL_GEO_NETWORK["END_POSITION"]])
 
             # Grab distribution root
             self._distribution_info_root = _dig_node_one(self._meta_root, [URL_GEO_NETWORK["DISTRIBUTION_INFO"],
@@ -243,20 +172,6 @@ class GeoNetworkReader(object):
         return self._uuid
 
 
-    def srid(self):
-        if ":" in self._srid:
-            return self._srid.split(":")[1]
-        return self._srid
-
-
-    def extent(self):
-        return self._extent
-
-
-    def temporal_extent(self):
-        return self._temporal_extent
-
-
     def title_full(self):
         if self.is_english():
             return {"en": self._title_og, "fr": self._title_alt}
@@ -279,19 +194,16 @@ class GeoNetworkReader(object):
         return {
             "uuid": self.uuid(),
             "topic": self.topic(),
-            "srid": self.srid(),
             "title_en": self.title_full()["en"],
             "title_fr": self.title_full()["fr"],
             "keywords_en": self.keywords_full()["en"],
             "keywords_fr": self.keywords_full()["fr"],
-            "extent": self.extent(),
-            "temporal_extent": self.temporal_extent(),
             "cogs": self.get_cogs()
         }
 
 
     def get_cogs(self):
-
+        
         cogs_infos = []
 
         # Loop on the transfer options nodes
