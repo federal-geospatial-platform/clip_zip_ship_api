@@ -115,10 +115,6 @@ ENV/
 
 .DS_Store
 examples/django/sample_project/db.sqlite3
-pygeoapi/db.sqlite3
-
-# Backup files
-*~
-
-# Pre-commit hooks config file
-.pre-commit-config.yaml
+/A1. BUILD.bat
+/A2. UPLOAD.bat
+/A3. DOWNLOAD.txt
