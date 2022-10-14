@@ -33,7 +33,7 @@
 Returns content from plugins and sets responses.
 """
 
-import asyncio
+import asyncio, yaml
 from collections import OrderedDict
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -53,6 +53,7 @@ from shapely.errors import WKTReadingError
 from shapely.wkt import loads as shapely_loads
 
 from pygeoapi import __version__, l10n
+from pygeoapi.openapi import get_oas
 from pygeoapi.formatter.base import FormatterSerializationError
 from pygeoapi.linked_data import (geojson2jsonld, jsonldify,
                                   jsonldify_collection)
@@ -640,52 +641,94 @@ class API:
         LOGGER.info('Process manager plugin loaded')
 
         # Now that basic configuration is read, call the load ressources
-        self.on_load_resources()
+        self.load_resources()
 
-        
-    def on_load_resources(self): # HACK: ALEX
-        
-        # Override this function to load the ressources dynamically in the self.config['resources'] node.
-        return None
 
-    def on_describe_collections(self, collections, geom_wkt, geom_crs): # HACK: ALEX
+    def load_resources(self):
+        # Load the resources
+        self.config['resources'] = self.on_load_resources(
+            self.config['resources'])
 
-        # Override this function to load more collections in the array.
-        # Default, returns the same collections object, unchanged.
+        # Save the resources back in the config files
+        # self.save_config()
+
+
+    def save_config(self):
+        """
+        Saves the current configuration in the PYGEOAPI_CONFIG file.
+        """
+
+        # Stringify
+        ymalStringData = yaml.dump(self.config, indent=4,
+                                   default_flow_style=False, sort_keys=False)
+
+        # Write to file
+        with open(os.environ.get('PYGEOAPI_CONFIG'), 'w', encoding='utf-8') as outfile:
+            outfile.write(ymalStringData)
+
+        # Also save the OpenAPI file
+        content = yaml.safe_dump(get_oas(self.config),
+                                 default_flow_style=False)
+
+        # Write to file
+        with open(os.environ.get('PYGEOAPI_OPENAPI'), 'w', encoding='utf-8') as outfile:
+            outfile.write(content)
+
+
+    def on_load_resources(self, resources):
+        """
+        Overridable function to load or alter the available resources
+         dynamically.
+        Returns the resources as-is, by default, expecting resources to be
+         already configured correctly.
+
+        :param resources: The current resources as configured
+         (self.config['resources'])
+        """
+
+        # By default, return the same collections object, unchanged.
+        return resources
+
+
+    def on_describe_collections(self, collections, geom_wkt, geom_crs):
+        """
+        Overridable function to load more informations in the collections information.
+        """
+
+        # By default, return the same collections object, unchanged.
         return collections
+
 
     def on_build_collection_finalize(self, locale, collection_data_type, input_coll, active_coll): # HACK: ALEX
-        # Do nothing
+        """
+        Overridable function to load more collections in the array.
+        """
+
+        # By default, do nothing
         return None
 
-    def on_filter_spatially(self, collections, geom_wkt, geom_crs): # HACK: ALEX
 
-        # Override this function to change the way the filtering by bbox works.
-        # Default, returns the same collections object, unfiltered.
+    def on_filter_spatially(self, collections, geom_wkt, geom_crs): # HACK: ALEX
+        """
+        Overridable function to spatially filter the collections based on a geometry.
+        """
+
+        # By default, return the same collections object, unfiltered spatially.
         return collections
 
-    def read_bbox(self, request: Union[APIRequest, Any], method: str):
-        # Depending on the method
-        q_bbox = None
-        
-        if method == 'GET':
-            q_bbox = request.params.get('bbox')
-            q_bbox = validate_bbox(q_bbox)
-        
-        elif method == 'POST':
-            d = request._data
-            if d:
-                d = d.decode().replace("'", '"')
-                d = json.loads(d)
-                if 'bbox' in d:
-                    q_bbox = d['bbox']
-                    q_bbox = validate_bbox(q_bbox)
-        return q_bbox
 
     def read_input(self, request: Union[APIRequest, Any], method: str, param_name: str):
+        """
+        Reads an input parameter from the service end point.
+        This function supports GET or POST http methods.
+        :param request: the current request from which to read the parameter
+        :param method: indicates if the parameter value should be read from GET or POST fashion. Possible values are "GET" or "POST".
+        :param param_name: the name of the parameter to read.
+        :returns: the parameter value
+        """
+
         # Depending on the method
         result = None
-        
         if method == 'GET':
             result = request.params.get(param_name)
 
@@ -698,7 +741,35 @@ class API:
                     result = d[param_name]
         return result
 
+    def read_bbox(self, request: Union[APIRequest, Any], method: str):
+        """
+        Reads a bbox input parameter from the service end point.
+        This function supports both GET or POST http methods.
+        :param request: the current request from which to read the bbox
+        :param method: indicates if the parameter value should be read from GET or POST fashion. Possible values are "GET" or "POST".
+        :returns: the bbox value
+        """
+
+        # Read the input
+        q_bbox = self.read_input(request, method, 'bbox')
+
+        # If found, validate it
+        if q_bbox:
+            q_bbox = validate_bbox(q_bbox)
+
+        return q_bbox
+
     def read_spatial_filter(self, request: Union[APIRequest, Any], method: str):
+        """
+        Reads a geometry or bbox spatial filter from the service end point.
+        When a bbox is specified and no geometry is specified, this function also converts the bbox (and its crs) to a geometry (and its crs) for convenience.
+        When no crs is specified for either geom-crs or bbox-crs, 4326 is the returned default.
+        This function supports both GET or POST http methods.
+        :param request: the current request from which to read the bbox
+        :param method: indicates if the parameter value should be read from GET or POST fashion. Possible values are "GET" or "POST".
+        :returns: an array of spatial filters as provided in the service request (geom, geom-crs, bbox, bbox-crs).
+        """
+
         # Read the geometry if any
         geom = self.read_input(request, method, 'geom')
 
@@ -712,7 +783,7 @@ class API:
             # Read the bbox if any
             bbox = self.read_bbox(request, method)
 
-            # Read the bboxcrs if any
+            # Read the bbox crs if any
             bboxcrs = self.read_input(request, method, 'bbox-crs') or 4326
 
             # If a bbox is set
@@ -727,24 +798,6 @@ class API:
 
         return geom, geomcrs, bbox, bboxcrs
 
-    @pre_process
-    @jsonldify
-    def reload_resources(self, request: Union[APIRequest, Any]) -> Tuple[dict, int, str]:
-        
-        """
-        HACK: ALEX: New function to regenerate the self.config object from the database
-
-        :param request: A request object
-
-        :returns: tuple of headers, status code, content
-        """
-        
-        headers = request.get_response_headers()
-
-        # Reinitialize the configuration
-        self.on_load_resources()
-       
-        return headers, 200, to_json({"reloaded": True}, self.pretty_print)
 
     @gzip
     @pre_process
@@ -1428,7 +1481,7 @@ class API:
 
         LOGGER.debug('Processing offset parameter')
         try:
-            offset = int(request.params.get('offset'))
+            offset = int(request.params.get('offset')) if request.params.get('offset') else 0
             if offset < 0:
                 msg = 'offset value should be positive or zero'
                 return self.get_exception(
