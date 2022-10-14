@@ -194,28 +194,34 @@ class PostgreSQLProvider(BaseProvider):
                 self.fields = db.fields
         return self.fields
 
-    def __get_where_clauses(self, properties=[], geom_wkt=None, geom_crs=None, data_crs=None):
+    def __get_where_clauses(self, properties=[], geom_wkt=None, geom_crs=4326, data_crs=None):
         """
         Generarates WHERE conditions to be implemented in query.
         Private method mainly associated with query method
         :param properties: list of tuples (name, value)
-        :param geom_wkt: the geometry to build the clause with
+        :param geom_wkt: the geom wkt to filter on (when any)
+        :param geom_crs: the spatial projection of the provided geom wkt, defaults to 4326 like the other providers
+        :param data_crs: the spatial projection of the data being queried
 
         :returns: psycopg2.sql.Composed or psycopg2.sql.SQL
         """
-        
+
         where_conditions = []
         if properties:
             property_clauses = [SQL('{} = {}').format(
                 Identifier(k), Literal(v)) for k, v in properties]
             where_conditions += property_clauses
 
+        # If a geom_wkt is specified, a geom_crs and a data_crs
+        # -> build the wkt with its crs and transform it to the data_crs in the query
         if geom_wkt and data_crs:
             geom_clause = SQL('ST_Intersects({}, ST_Transform(ST_PolygonFromText({}, ' + str(geom_crs) + '), ' + str(data_crs) + '))').format(
                 Identifier(self.geom), Literal(geom_wkt))
             where_conditions.append(geom_clause)
 
-        elif geom_wkt:
+        # If a geom_wkt is specified and no data_crs
+        # -> build the wkt with its crs and query the database as-is
+        elif geom_wkt and not data_crs:
             geom_clause = SQL('ST_Intersects({}, ST_PolygonFromText({}, ' + str(geom_crs) + '))').format(
                 Identifier(self.geom), Literal(geom_wkt))
             where_conditions.append(geom_clause)
@@ -244,7 +250,8 @@ class PostgreSQLProvider(BaseProvider):
         return SQL(f"ORDER BY {','.join(ret)}")
 
     def query(self, offset=0, limit=10, resulttype='results',
-              bbox=None, bbox_crs=None, geom_wkt=None, geom_crs=None, data_crs=None, datetime_=None, properties=[], sortby=[],
+              bbox=None, bbox_crs=4326, geom_wkt=None, geom_crs=4326, data_crs=None,
+              datetime_=None, properties=[], sortby=[],
               select_properties=[], skip_geometry=False, q=None, **kwargs):
         """
         Query Postgis for all the content.
@@ -254,11 +261,11 @@ class PostgreSQLProvider(BaseProvider):
         :param offset: starting record to return (default 0)
         :param limit: number of records to return (default 10)
         :param resulttype: return results or hit limit (default results)
-        :param bbox: bounding box [minx,miny,maxx,maxy]
-        :param bbox_crs: the spatial projection of the provided bounding box
-        :param geom_wkt: the geom wkt
-        :param geom_crs: the spatial projection of the provided geom wkt
-        :param data_crs: the spatial projection of the data being queried
+        :param bbox: bounding box [minx,miny,maxx,maxy] to query on (when any)
+        :param bbox_crs: the spatial projection of the provided bounding box, defaults to 4326 like the other providers
+        :param geom_wkt: the geom wkt to query on (when any)
+        :param geom_crs: the spatial projection of the provided geom wkt, defaults to 4326 like the other providers
+        :param data_crs: the spatial projection of the data being queried, as read from the provider configuration
         :param datetime_: temporal (datestamp or extent)
         :param properties: list of tuples (name, value)
         :param sortby: list of dicts (property, order)
@@ -270,6 +277,8 @@ class PostgreSQLProvider(BaseProvider):
         """
         LOGGER.debug('Querying PostGIS')
 
+        # If there's no geometry and there's a bbox, transform the bbox to a geometry for convenience
+        # It's possible that the bbox has already been converted to a geometry-wkt, earlier, but making sure in this call too as bbox is repeated as input parameter here
         if not geom_wkt and bbox:
             # Transform bbox to polygon wkt
             geom_wkt = "POLYGON(({x_min} {y_min}, {x_min} {y_max}, {x_max} {y_max}, {x_max} {y_min}, {x_min} {y_min}))".format(
