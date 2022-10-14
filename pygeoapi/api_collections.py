@@ -1,7 +1,15 @@
-import sys, os, json
+import sys, os, logging, json, requests
+from dateutil.parser import parse
+from urllib.parse import urlparse
+from typing import Any, Tuple, Union
+from configparser import ConfigParser
 import json, ast, yaml, psycopg2
 import psycopg2.extras
 from psycopg2 import sql
+from pygeoapi.linked_data import jsonldify
+from pygeoapi.api import API, APIRequest, pre_process
+from pygeoapi.util import (to_json, yaml_load)
+from copy import deepcopy
 
 
 # This is a data structure template for a Postgres provider.
@@ -283,7 +291,7 @@ def query_collections(conn, polygon_wkt: str, projection_id: int, projection_id_
     sql_query = "SELECT * FROM {table} WHERE {spatial_filter} ORDER BY {field_coll_name}"
 
     # Execute a statement
-    cur.execute(sql.SQL(sql_query).format(table=sql.Identifier(conn.info.dbname, "czs_collection"),
+    cur.execute(sql.SQL(sql_query).format(table=sql.Identifier("czs", "czs_collection"),
                                           spatial_filter=sql.SQL(spatial_filter),
                                           field_coll_name=sql.Identifier("collection_name")))
 
@@ -311,7 +319,7 @@ def fetch_collections(conn):
     sql_query = "SELECT * FROM {table_coll} ORDER BY {order_field}"
 
     # Execute a statement
-    cur.execute(sql.SQL(sql_query).format(table_coll=sql.Identifier(conn.info.dbname, "v_czs_collections"),
+    cur.execute(sql.SQL(sql_query).format(table_coll=sql.Identifier("czs", "v_czs_collections"),
                                           order_field=sql.Identifier("collection_uuid")))
 
     # Fetch and return

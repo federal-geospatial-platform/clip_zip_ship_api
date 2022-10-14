@@ -1,8 +1,9 @@
-import sys, os, json, requests, psycopg2
+import sys, os, json, requests, psycopg2, logging
 from dateutil.parser import parse
 from urllib.parse import urlparse
 import psycopg2.extras
 from psycopg2 import sql
+from pygeoapi.linked_data import jsonldify
 from pygeoapi.geonetwork import GeoNetworkReader
 
 
@@ -13,7 +14,7 @@ def flush_rasterio(conn):
 
         # Query in the database
         query = sql.SQL(str_query).format(
-            table=sql.Identifier(conn.info.dbname, "czs_collection"))
+            table=sql.Identifier("czs", "czs_collection"))
 
         # Execute cursor
         cur.execute(query, ('coverage', 'rasterio'))
