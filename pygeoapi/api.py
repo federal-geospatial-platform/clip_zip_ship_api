@@ -700,16 +700,16 @@ class API:
         return collections
 
 
-    def on_build_collection_finalize(self, locale, collection_data_type, input_coll, active_coll): # HACK: ALEX
+    def on_build_collection_finalize(self, locale, collection_data_type, input_coll, active_coll):
         """
-        Overridable function to load more collections in the array.
+        Overridable function to modify the collection information before returning to client.
         """
 
         # By default, do nothing
         return None
 
 
-    def on_filter_spatially(self, collections, geom_wkt, geom_crs): # HACK: ALEX
+    def on_filter_spatially(self, collections, geom_wkt, geom_crs):
         """
         Overridable function to spatially filter the collections based on a geometry.
         """

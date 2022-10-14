@@ -1,9 +1,8 @@
-import sys, os, json, requests, psycopg2, logging
+import sys, os, json, requests, psycopg2
 from dateutil.parser import parse
 from urllib.parse import urlparse
 import psycopg2.extras
 from psycopg2 import sql
-from pygeoapi.linked_data import jsonldify
 from pygeoapi.geonetwork import GeoNetworkReader
 
 
