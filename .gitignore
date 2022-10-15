@@ -115,6 +115,3 @@ ENV/
 
 .DS_Store
 examples/django/sample_project/db.sqlite3
-/A1. BUILD.bat
-/A2. UPLOAD.bat
-/A3. DOWNLOAD.txt
