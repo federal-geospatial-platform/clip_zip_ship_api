@@ -180,7 +180,7 @@ def collections(collection_id=None):
 
     :returns: HTTP response
     """
-    return get_response(api_.describe_collections(request, request.method, collection_id))
+    return get_response(api_.describe_collections(request, collection_id))
 
 
 @BLUEPRINT.route('/collections/<path:collection_id>/queryables')
