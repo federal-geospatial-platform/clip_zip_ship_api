@@ -1,1 +1,0 @@
-for /R %G in (*.yml;*.sh;*.py;*.xml;*.txt) do dos2unix "%G"
