@@ -18,7 +18,7 @@ from copy import deepcopy
 class API_CZS(API):
     """
     This class inherits and overrides some specific functions from
-     the core PyGeoAPI-API object to add NRCan-specificfunctionalities.
+     the core PyGeoAPI-API object to add NRCan-specific functionalities.
     """
 
     def __init__(self, config):
