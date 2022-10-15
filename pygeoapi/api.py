@@ -650,10 +650,10 @@ class API:
             self.config['resources'])
 
         # Save the resources back in the config files
-        # self.save_config()
+        # self.save_configs()
 
 
-    def save_config(self):
+    def save_configs(self):
         """
         Saves the current configuration in the PYGEOAPI_CONFIG file.
         """
@@ -663,7 +663,8 @@ class API:
                                    default_flow_style=False, sort_keys=False)
 
         # Write to file
-        with open(os.environ.get('PYGEOAPI_CONFIG'), 'w', encoding='utf-8') as outfile:
+        with open(os.environ.get('PYGEOAPI_CONFIG'), 'w',
+                  encoding='utf-8') as outfile:
             outfile.write(ymalStringData)
 
         # Also save the OpenAPI file
@@ -671,7 +672,8 @@ class API:
                                  default_flow_style=False)
 
         # Write to file
-        with open(os.environ.get('PYGEOAPI_OPENAPI'), 'w', encoding='utf-8') as outfile:
+        with open(os.environ.get('PYGEOAPI_OPENAPI'), 'w',
+                  encoding='utf-8') as outfile:
             outfile.write(content)
 
 
@@ -686,22 +688,25 @@ class API:
          (self.config['resources'])
         """
 
-        # By default, return the same collections object, unchanged.
+        # By default, return the same resources object, unchanged.
         return resources
 
 
     def on_describe_collections(self, collections, geom_wkt, geom_crs):
         """
-        Overridable function to load more informations in the collections information.
+        Overridable function to load more informations in the collections
+         information.
         """
 
         # By default, return the same collections object, unchanged.
         return collections
 
 
-    def on_build_collection_finalize(self, locale, collection_data_type, input_coll, active_coll):
+    def on_build_collection_finalize(self, locale, collection_data_type,
+                                     input_coll, active_coll):
         """
-        Overridable function to modify the collection information before returning to client.
+        Overridable function to modify the collection information before
+         returning to client.
         """
 
         # By default, do nothing
@@ -710,19 +715,22 @@ class API:
 
     def on_filter_spatially(self, collections, geom_wkt, geom_crs):
         """
-        Overridable function to spatially filter the collections based on a geometry.
+        Overridable function to spatially filter the collections based on a
+         geometry.
         """
 
         # By default, return the same collections object, unfiltered spatially.
         return collections
 
 
-    def read_input(self, request: Union[APIRequest, Any], method: str, param_name: str):
+    def read_input(self, request: Union[APIRequest, Any],
+                   method: str, param_name: str):
         """
         Reads an input parameter from the service end point.
         This function supports GET or POST http methods.
         :param request: the current request from which to read the parameter
-        :param method: indicates if the parameter value should be read from GET or POST fashion. Possible values are "GET" or "POST".
+        :param method: indicates if the parameter value should be read from
+         GET or POST fashion. Possible values are "GET" or "POST".
         :param param_name: the name of the parameter to read.
         :returns: the parameter value
         """
@@ -746,7 +754,8 @@ class API:
         Reads a bbox input parameter from the service end point.
         This function supports both GET or POST http methods.
         :param request: the current request from which to read the bbox
-        :param method: indicates if the parameter value should be read from GET or POST fashion. Possible values are "GET" or "POST".
+        :param method: indicates if the parameter value should be read from
+         GET or POST fashion. Possible values are "GET" or "POST".
         :returns: the bbox value
         """
 
@@ -762,12 +771,17 @@ class API:
     def read_spatial_filter(self, request: Union[APIRequest, Any], method: str):
         """
         Reads a geometry or bbox spatial filter from the service end point.
-        When a bbox is specified and no geometry is specified, this function also converts the bbox (and its crs) to a geometry (and its crs) for convenience.
-        When no crs is specified for either geom-crs or bbox-crs, 4326 is the returned default.
+        When a bbox is specified and no geometry is specified, this function
+         also converts the bbox (and its crs) to a geometry (and its crs) for
+          convenience.
+        When no crs is specified for either geom-crs or bbox-crs, 4326 is the
+         returned default.
         This function supports both GET or POST http methods.
         :param request: the current request from which to read the bbox
-        :param method: indicates if the parameter value should be read from GET or POST fashion. Possible values are "GET" or "POST".
-        :returns: an array of spatial filters as provided in the service request (geom, geom-crs, bbox, bbox-crs).
+        :param method: indicates if the parameter value should be read from GET
+         or POST fashion. Possible values are "GET" or "POST".
+        :returns: an array of spatial filters as provided in the service
+         request (geom, geom-crs, bbox, bbox-crs).
         """
 
         # Read the geometry if any
@@ -789,7 +803,9 @@ class API:
             # If a bbox is set
             if bbox:
                 # Transform bbox to polygon wkt
-                geom = "POLYGON(({x_min} {y_min}, {x_min} {y_max}, {x_max} {y_max}, {x_max} {y_min}, {x_min} {y_min}))".format(
+                geom = """POLYGON(({x_min} {y_min}, {x_min} {y_max},
+                                   {x_max} {y_max}, {x_max} {y_min},
+                                   {x_min} {y_min}))""".format(
                     x_min=bbox[0],
                     y_min=bbox[1],
                     x_max=bbox[2],
@@ -980,7 +996,7 @@ class API:
     @gzip
     @pre_process
     @jsonldify
-    def describe_collections(self, request: Union[APIRequest, Any], method: str,
+    def describe_collections(self, request: Union[APIRequest, Any],
                              dataset=None) -> Tuple[dict, int, str]:
         """
         Provide collection metadata
@@ -1008,8 +1024,10 @@ class API:
         bbox = None
         bboxcrs = None
         try:
+            print("THE METHOD")
+            print(request.method)
             # Read the spatial filter parameters from the request
-            geom, geomcrs, bbox, bboxcrs = self.read_spatial_filter(request, method)
+            geom, geomcrs, bbox, bboxcrs = self.read_spatial_filter(request, request.method) # noqa
 
         except ValueError as err:
             msg = str(err)
@@ -1020,7 +1038,7 @@ class API:
         collections = self.on_describe_collections(collections, geom, geomcrs)
 
         # Filter by bbox
-        collections = self.on_filter_spatially(collections, geom, geomcrs or 4326)
+        collections = self.on_filter_spatially(collections, geom, geomcrs or 4326) # noqa
 
 
         if all([dataset is not None, dataset not in collections.keys()]):
@@ -1521,7 +1539,7 @@ class API:
         bboxcrs = None
         try:
             # Read the spatial filter parameters from the request
-            geom, geomcrs, bbox, bboxcrs = self.read_spatial_filter(request, "GET")
+            geom, geomcrs, bbox, bboxcrs = self.read_spatial_filter(request, "GET") # noqa
 
         except ValueError as err:
             msg = str(err)
@@ -1878,7 +1896,7 @@ class API:
         bboxcrs = None
         try:
             # Read the spatial filter parameters from the request
-            geom, geomcrs, bbox, bboxcrs = self.read_spatial_filter(request, "POST")
+            geom, geomcrs, bbox, bboxcrs = self.read_spatial_filter(request, "POST") # noqa
 
         except ValueError as err:
             msg = str(err)
@@ -2238,7 +2256,7 @@ class API:
         bboxcrs = None
         try:
             # Read the spatial filter parameters from the request
-            geom, geomcrs, bbox, bboxcrs = self.read_spatial_filter(request, "GET")
+            geom, geomcrs, bbox, bboxcrs = self.read_spatial_filter(request, "GET") # noqa
 
         except ValueError as err:
             msg = str(err)
