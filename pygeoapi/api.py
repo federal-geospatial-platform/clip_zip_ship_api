@@ -605,7 +605,7 @@ class APIRequest:
         if method == 'POST':
             d = self.data
             if d:
-                d = d.decode().replace("'", '"')
+                d = d.decode()
                 d = json.loads(d)
                 if param_name in d:
                     result = d[param_name]
