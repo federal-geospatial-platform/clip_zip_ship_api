@@ -349,7 +349,7 @@ def get_oas_30(cfg):
             'geom': {
                 'name': 'geom',
                 'in': 'query',
-                'description': 'Indicates a Well-Known-Text geometry.',
+                'description': 'Only features that have a geometry that intersects the provided geometry are selected. The geometry is provided as a well known text format (WKT)',  # noqa
                 'required': False,
                 'style': 'form',
                 'explode': False,
@@ -360,7 +360,7 @@ def get_oas_30(cfg):
             'geom-crs': {
                 'name': 'geom-crs',
                 'in': 'query',
-                'description': 'Indicates the EPSG for the given Well-Known-Text geometry.',
+                'description': 'Indicates the EPSG for the given Well-Known-Text geometry.',  # noqa
                 'required': False,
                 'style': 'form',
                 'explode': False,
