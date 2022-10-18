@@ -127,7 +127,6 @@ class DatabaseConnection:
                 AND attnum > 0
             """
 
-            #self.cur.execute(query_cols, (self.table,))
             self.cur.execute(query_cols, ('"' + self.table + '"',))
             result = self.cur.fetchall()
             if self.properties:
@@ -297,7 +296,8 @@ class PostgreSQLProvider(BaseProvider):
                 cursor = db.conn.cursor(cursor_factory=RealDictCursor)
 
                 where_clause = self.__get_where_clauses(
-                    properties=properties, geom_wkt=geom_wkt, geom_crs=geom_crs, data_crs=data_crs)
+                    properties=properties, geom_wkt=geom_wkt, geom_crs=geom_crs,
+                    data_crs=data_crs)
 
                 sql_query = SQL("SELECT COUNT(*) as hits from {} {}").\
                     format(Identifier(self.table), where_clause)
@@ -326,7 +326,8 @@ class PostgreSQLProvider(BaseProvider):
                 SQL(",ST_AsGeoJSON({})").format(Identifier(self.geom))
 
             where_clause = self.__get_where_clauses(
-                properties=properties, geom_wkt=geom_wkt, geom_crs=geom_crs, data_crs=data_crs)
+                properties=properties, geom_wkt=geom_wkt, geom_crs=geom_crs,
+                data_crs=data_crs)
 
             orderby = self._make_orderby(sortby) if sortby else SQL('')
 

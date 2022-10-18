@@ -602,16 +602,18 @@ class APIRequest:
 
         # Depending on the method
         result = None
-        if method == 'GET':
-            result = self.params.get(param_name)
-
-        elif method == 'POST':
+        if method == 'POST':
             d = self.data
             if d:
                 d = d.decode().replace("'", '"')
                 d = json.loads(d)
                 if param_name in d:
                     result = d[param_name]
+
+        else:
+            result = self.params.get(param_name)
+
+        # Return the value of the given parameter name
         return result
 
     def read_bbox(self, method: str):
@@ -652,17 +654,17 @@ class APIRequest:
         geom = self.read_param(method, 'geom')
 
         # Read the geometry crs if any
-        geomcrs = self.read_param(method, 'geom-crs') or 4326
+        geom_crs = self.read_param(method, 'geom-crs') or 4326
 
         # If no geom_wkt
         bbox = None
-        bboxcrs = None
+        bbox_crs = None
         if not geom:
             # Read the bbox if any
             bbox = self.read_bbox(method)
 
             # Read the bbox crs if any
-            bboxcrs = self.read_param(method, 'bbox-crs') or 4326
+            bbox_crs = self.read_param(method, 'bbox-crs') or 4326
 
             # If a bbox is set
             if bbox:
@@ -674,9 +676,9 @@ class APIRequest:
                     y_min=bbox[1],
                     x_max=bbox[2],
                     y_max=bbox[3])
-                geomcrs = bboxcrs
+                geom_crs = bbox_crs
 
-        return geom, geomcrs, bbox, bboxcrs
+        return geom, geom_crs, bbox, bbox_crs
 
 
 
@@ -1082,12 +1084,12 @@ class API:
                                                'type', 'collection')
 
         geom = None
-        geomcrs = None
+        geom_crs = None
         bbox = None
-        bboxcrs = None
+        bbox_crs = None
         try:
             # Read the spatial filter parameters from the request
-            geom, geomcrs, bbox, bboxcrs = request.read_spatial_filter(method) # noqa
+            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter(method) # noqa
 
         except ValueError as err:
             msg = str(err)
@@ -1095,7 +1097,7 @@ class API:
                 400, headers, request.format, 'InvalidParameterValue', msg)
 
         # Filter by bbox
-        collections = self.on_filter_spatially(collections, geom, geomcrs or 4326) # noqa
+        collections = self.on_filter_spatially(collections, geom, geom_crs or 4326) # noqa
 
 
         if all([dataset is not None, dataset not in collections.keys()]):
@@ -1192,9 +1194,9 @@ class API:
                     self.get_collections_url(), k, F_HTML)
             })
 
-            collection['itemType'] = collection_data_type
             if collection_data_type in ['feature', 'record', 'tile']:
                 # TODO: translate
+                collection['itemType'] = collection_data_type
                 LOGGER.debug('Adding feature/record based links')
                 collection['links'].append({
                     'type': FORMAT_TYPES[F_JSON],
@@ -1556,7 +1558,7 @@ class API:
 
         LOGGER.debug('Processing offset parameter')
         try:
-            offset = int(request.params.get('offset')) if request.params.get('offset') else 0
+            offset = int(request.params.get('offset'))
             if offset < 0:
                 msg = 'offset value should be positive or zero'
                 return self.get_exception(
@@ -1591,12 +1593,12 @@ class API:
         LOGGER.debug('Processing spatial filter parameters')
 
         geom = None
-        geomcrs = None
+        geom_crs = None
         bbox = None
-        bboxcrs = None
+        bbox_crs = None
         try:
             # Read the spatial filter parameters from the request
-            geom, geomcrs, bbox, bboxcrs = request.read_spatial_filter("GET") # noqa
+            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter("GET") # noqa
 
         except ValueError as err:
             msg = str(err)
@@ -1695,9 +1697,9 @@ class API:
         prv_locale = l10n.get_plugin_locale(provider_def, request.raw_locale)
 
         # Get crs of the data
-        datacrs = None
+        data_crs = None
         if 'crs' in provider_def:
-            datacrs = provider_def["crs"]
+            data_crs = provider_def["crs"]
 
         LOGGER.debug('Querying provider')
         LOGGER.debug('offset: {}'.format(offset))
@@ -1705,9 +1707,10 @@ class API:
         LOGGER.debug('resulttype: {}'.format(resulttype))
         LOGGER.debug('sortby: {}'.format(sortby))
         LOGGER.debug('bbox: {}'.format(bbox))
-        LOGGER.debug('bbox-crs: {}'.format(bboxcrs))
+        LOGGER.debug('bbox-crs: {}'.format(bbox_crs))
         LOGGER.debug('geom: {}'.format(geom))
-        LOGGER.debug('geom-crs: {}'.format(geomcrs))
+        LOGGER.debug('geom-crs: {}'.format(geom_crs))
+        LOGGER.debug('data-crs: {}'.format(data_crs))
         LOGGER.debug('datetime: {}'.format(datetime_))
         LOGGER.debug('properties: {}'.format(properties))
         LOGGER.debug('select properties: {}'.format(select_properties))
@@ -1717,8 +1720,8 @@ class API:
 
         try:
             content = p.query(offset=offset, limit=limit,
-                              resulttype=resulttype, bbox=bbox, bbox_crs=bboxcrs,
-                              geom_wkt=geom, geom_crs=geomcrs, data_crs=datacrs,
+                              resulttype=resulttype, bbox=bbox, bbox_crs=bbox_crs,
+                              geom_wkt=geom, geom_crs=geom_crs, data_crs=data_crs,
                               datetime_=datetime_, properties=properties,
                               sortby=sortby,
                               select_properties=select_properties,
@@ -1832,7 +1835,6 @@ class API:
                                          'collections/items/index.html',
                                          content, request.locale)
             return headers, 200, content
-
         elif request.format == 'csv':  # render
             formatter = load_plugin('formatter',
                                     {'name': 'CSV', 'geom': True})
@@ -1948,12 +1950,12 @@ class API:
         LOGGER.debug('Processing spatial filter parameters')
 
         geom = None
-        geomcrs = None
+        geom_crs = None
         bbox = None
-        bboxcrs = None
+        bbox_crs = None
         try:
             # Read the spatial filter parameters from the request
-            geom, geomcrs, bbox, bboxcrs = request.read_spatial_filter("POST") # noqa
+            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter("POST") # noqa
 
         except ValueError as err:
             msg = str(err)
@@ -2064,12 +2066,21 @@ class API:
             return self.get_exception(
                 400, headers, request.format, 'InvalidParameterValue', msg)
 
+        # Get crs of the data
+        data_crs = None
+        if 'crs' in provider_def:
+            data_crs = provider_def["crs"]
+
         LOGGER.debug('Querying provider')
         LOGGER.debug('offset: {}'.format(offset))
         LOGGER.debug('limit: {}'.format(limit))
         LOGGER.debug('resulttype: {}'.format(resulttype))
         LOGGER.debug('sortby: {}'.format(sortby))
         LOGGER.debug('bbox: {}'.format(bbox))
+        LOGGER.debug('bbox-crs: {}'.format(bbox_crs))
+        LOGGER.debug('geom: {}'.format(geom))
+        LOGGER.debug('geom-crs: {}'.format(geom_crs))
+        LOGGER.debug('data-crs: {}'.format(data_crs))
         LOGGER.debug('datetime: {}'.format(datetime_))
         LOGGER.debug('properties: {}'.format(select_properties))
         LOGGER.debug('skipGeometry: {}'.format(skip_geometry))
@@ -2307,23 +2318,29 @@ class API:
             return self.get_exception(
                 500, headers, format_, 'NoApplicableCode', msg)
 
+        LOGGER.debug('Processing spatial filter parameters')
+
         geom = None
-        geomcrs = None
+        geom_crs = None
         bbox = None
-        bboxcrs = None
+        bbox_crs = None
         try:
             # Read the spatial filter parameters from the request
-            geom, geomcrs, bbox, bboxcrs = request.read_spatial_filter("GET") # noqa
+            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter("GET") # noqa
 
         except ValueError as err:
             msg = str(err)
             return self.get_exception(
                 400, headers, request.format, 'InvalidParameterValue', msg)
 
-        query_args['geom_wkt'] = geom
-        query_args['geom_crs'] = geomcrs
-        query_args['bbox'] = bbox
-        query_args['bbox_crs'] = bboxcrs
+        if geom:
+            query_args['geom_wkt'] = geom
+        if geom_crs:
+            query_args['geom_crs'] = geom_crs
+        if bbox:
+            query_args['bbox'] = bbox
+        if bbox_crs:
+            query_args['bbox_crs'] = bbox_crs
 
         LOGGER.debug('Processing datetime parameter')
 
