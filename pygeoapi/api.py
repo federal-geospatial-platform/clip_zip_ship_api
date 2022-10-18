@@ -595,7 +595,7 @@ class APIRequest:
         Reads an input parameter from the service end point.
         This function reads parameters provided via either GET or POST methods.
         :param method: indicates if the parameter value should be read from
-         a GET or a POST request. Possible values are "GET" or "POST".
+        a GET or a POST request. Possible values are "GET" or "POST".
         :param param_name: the name of the parameter to read.
         :returns: the parameter value
         """
@@ -621,7 +621,7 @@ class APIRequest:
         Reads a bbox input parameter from the service end point.
         This function reads a bbox parameter in either GET or POST methods.
         :param method: indicates if the parameter value should be read from
-         GET or POST fashion. Possible values are "GET" or "POST".
+        GET or POST fashion. Possible values are "GET" or "POST".
         :returns: the bbox value
         """
 
@@ -638,23 +638,21 @@ class APIRequest:
         """
         Reads a geometry or bbox spatial filter from the service end point.
         When a bbox is specified and no geometry is specified, this function
-         also converts the bbox (and its crs) to a geometry (and its crs) for
-          convenience.
-        When no crs is specified for either geom-crs or bbox-crs, 4326 is the
-         returned default.
+        also converts the bbox (and its crs) to a geometry (and its crs) for
+        convenience when working with a spatial filter.
         This function reads spatial filter information in either GET or POST
-         http methods.
+        http methods.
         :param method: indicates if the parameter value should be read from GET
-         or POST fashion. Possible values are "GET" or "POST".
+        or POST fashion. Possible values are "GET" or "POST".
         :returns: an array of spatial filters as provided in the service
-         request (geom, geom-crs, bbox, bbox-crs).
+        request (geom, geom-crs, bbox, bbox-crs).
         """
 
         # Read the geometry if any
         geom = self.read_param(method, 'geom')
 
         # Read the geometry crs if any
-        geom_crs = self.read_param(method, 'geom-crs') or 4326
+        geom_crs = self.read_param(method, 'geom-crs')
 
         # If no geom_wkt
         bbox = None
@@ -664,7 +662,7 @@ class APIRequest:
             bbox = self.read_bbox(method)
 
             # Read the bbox crs if any
-            bbox_crs = self.read_param(method, 'bbox-crs') or 4326
+            bbox_crs = self.read_param(method, 'bbox-crs')
 
             # If a bbox is set
             if bbox:
@@ -753,32 +751,33 @@ class API:
     def on_load_resources(self, resources):
         """
         Overridable function to load (or reload) the available resources
-         dynamically.
+        dynamically.
         By default, this function simply returns the resources as-is. This is
-         the original behavior of the API; expecting resources to be
-         already configured correctly per the yaml config file.
+        the original behavior of the API; expecting resources to be
+        already configured correctly per the yaml config file.
 
         :param resources: the resources as currently configured
-         (self.config['resources'])
+        (self.config['resources'])
         :returns: the resources dictionary that's available in the API.
         """
 
         # By default, return the same resources object, unchanged.
         return resources
 
-    def on_filter_spatially(self, collections, geom_wkt, geom_crs):
+    def on_description_filter_spatially(self, collections, geom_wkt, geom_crs):
         """
         Overridable function to spatially filter the collections list based on
-         a geometry.
+        a geometry.
         This function is called when the /collections or
-         /collections/<collection_id> end points are hit (as it's the same
-         Python handler method).
+        /collections/<collection_id> end points are hit (as it's the same
+        Python handler method).
         Example of usage: typically, when the /collections end point is hit,
-         all the collections are returned to the client. This overridable
-         method enables developers to perform additional processing.
-         For instance, spatial filtering the collections according to a
-         geometry which would have been provided by the client performing
-         the request.
+        all the collections are returned to the client. This overridable
+        method enables developers to perform additional processing before
+        returning the response to the client..
+        For instance, spatial filtering the collections according to a
+        geometry which would have been provided by the client performing
+        the request.
         :returns: the collections available in the API.
         """
 
@@ -789,13 +788,13 @@ class API:
                                      input_coll, active_coll):
         """
         Overridable function to modify the collection information before
-         returning it to the client.
+        returning it to the client.
         This function is called when the /collections or
-         /collections/<collection_id> end points are hit (as it's the same
-         Python handler method). Edit the "active_coll" object to alter the
-         output to the client for the given collection.
+        /collections/<collection_id> end points are hit (as it's the same
+        Python handler method). Edit the "active_coll" object to alter the
+        output to the client for the given collection.
         Example of usage: we might want to attach some metadata information,
-         fetched dynamically, for each collection information object.
+        fetched dynamically, for each collection information object.
         """
 
         # By default, do nothing
@@ -808,7 +807,8 @@ class API:
 
         # Stringify
         ymalStringData = yaml.dump(self.config, indent=4,
-                                   default_flow_style=False, sort_keys=False)
+                                   allow_unicode=True, default_flow_style=False,
+                                   sort_keys=False)
 
         # Write to file
         with open(os.environ.get('PYGEOAPI_CONFIG'), 'w',
@@ -819,13 +819,13 @@ class API:
         """
         Saves the current configuration in the PYGEOAPI_OPENAPI file.
         This method does basically the same thing as:
-         pygeoapi openapi generate $PYGEOAPI_CONFIG --output-file
-         $PYGEOAPI_OPENAPI
+        pygeoapi openapi generate $PYGEOAPI_CONFIG --output-file
+        $PYGEOAPI_OPENAPI
         """
 
         # Also save the OpenAPI file
         content = yaml.safe_dump(get_oas(self.config),
-                                 default_flow_style=False)
+                                 allow_unicode=True, default_flow_style=False)
 
         # Write to file
         with open(os.environ.get('PYGEOAPI_OPENAPI'), 'w',
@@ -835,7 +835,7 @@ class API:
     def save_configs(self, save_openapi: bool):
         """
         Saves the current configuration in the PYGEOAPI_CONFIG file and,
-         optionally, when save_openapi is true, in the PYGEOAPI_OPENAPI file.
+        optionally, when save_openapi is true, in the PYGEOAPI_OPENAPI file.
         """
 
         # Save the config
@@ -1039,7 +1039,8 @@ class API:
         :returns: tuple of headers, status code, content
         """
 
-        # Redirect to the common method specifying the GET method
+        # Redirect to the common describe_collections method
+        # specifying the GET method was used
         return self.describe_collections(request, dataset, "GET")
 
     @gzip
@@ -1056,7 +1057,8 @@ class API:
         :returns: tuple of headers, status code, content
         """
 
-        # Redirect to the common method specifying the POST method
+        # Redirect to the common describe_collections method
+        # specifying the POST method was used
         return self.describe_collections(request, dataset, "POST")
 
 
@@ -1097,7 +1099,7 @@ class API:
                 400, headers, request.format, 'InvalidParameterValue', msg)
 
         # Filter by bbox
-        collections = self.on_filter_spatially(collections, geom, geom_crs or 4326) # noqa
+        collections = self.on_description_filter_spatially(collections, geom, geom_crs) # noqa
 
 
         if all([dataset is not None, dataset not in collections.keys()]):
@@ -1376,7 +1378,8 @@ class API:
                     pass
 
             # Finalize building the collection information
-            self.on_build_collection_finalize(request.locale, collection_data_type, v, collection)
+            self.on_build_collection_finalize(request.locale, 
+                                              collection_data_type, v, collection)
 
             if dataset is not None and k == dataset:
                 fcm = collection
@@ -2113,7 +2116,8 @@ class API:
             if val:
                 filter_ = CQLModel.parse_raw(data)
             content = p.query(offset=offset, limit=limit,
-                              resulttype=resulttype, bbox=bbox,
+                              resulttype=resulttype, bbox=bbox, bbox_crs=bbox_crs,
+                              geom_wkt=geom, geom_crs=geom_crs, data_crs=data_crs,
                               datetime_=datetime_, properties=properties,
                               sortby=sortby,
                               select_properties=select_properties,

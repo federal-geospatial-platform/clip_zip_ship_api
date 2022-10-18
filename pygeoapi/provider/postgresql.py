@@ -193,14 +193,18 @@ class PostgreSQLProvider(BaseProvider):
                 self.fields = db.fields
         return self.fields
 
-    def __get_where_clauses(self, properties=[], geom_wkt=None, geom_crs=4326, data_crs=None):
+    def __get_where_clauses(self, properties=[], bbox=[], geom_wkt=None,
+                            geom_crs=None, data_crs=None):
         """
-        Generarates WHERE conditions to be implemented in query.
+        Generates WHERE conditions to be implemented in query.
         Private method mainly associated with query method
         :param properties: list of tuples (name, value)
-        :param geom_wkt: the geom wkt to filter on (when any)
-        :param geom_crs: the spatial projection of the provided geom wkt, defaults to 4326 like the other providers
+        :param geom_wkt: the geom wkt to filter on
+        (when specified)
+        :param geom_crs: the spatial projection of the provided geom wkt
+        (when specified)
         :param data_crs: the spatial projection of the data being queried
+        (when specified)
 
         :returns: psycopg2.sql.Composed or psycopg2.sql.SQL
         """
@@ -211,18 +215,36 @@ class PostgreSQLProvider(BaseProvider):
                 Identifier(k), Literal(v)) for k, v in properties]
             where_conditions += property_clauses
 
-        # If a geom_wkt is specified, a geom_crs and a data_crs
-        # -> build the wkt with its crs and transform it to the data_crs in the query
-        if geom_wkt and data_crs:
-            geom_clause = SQL('ST_Intersects({}, ST_Transform(ST_PolygonFromText({}, ' + str(geom_crs) + '), ' + str(data_crs) + '))').format(
-                Identifier(self.geom), Literal(geom_wkt))
+        # If a geom_wkt, a geom_crs and data_crs are specified and
+        # geom_crs is different than data_crs
+        if geom_wkt and geom_crs and data_crs and \
+           str(geom_crs) != str(data_crs):
+            # -> Build the wkt with its crs and transform it to the
+            #    data_crs in the query
+            geom_clause = SQL(
+                """ST_Intersects({},
+                     ST_Transform(
+                       ST_PolygonFromText({}, {}), {}))""").format(
+                    Identifier(self.geom),
+                    Literal(geom_wkt),
+                    Literal(geom_crs),
+                    Literal(data_crs))
             where_conditions.append(geom_clause)
 
-        # If a geom_wkt is specified and no data_crs
-        # -> build the wkt with its crs and query the database as-is
-        elif geom_wkt and not data_crs:
-            geom_clause = SQL('ST_Intersects({}, ST_PolygonFromText({}, ' + str(geom_crs) + '))').format(
-                Identifier(self.geom), Literal(geom_wkt))
+        elif geom_wkt and geom_crs:
+            # -> Build the wkt and query the database as-is hoping the crs match
+            geom_clause = SQL(
+                "ST_Intersects({}, ST_PolygonFromText({}, {}))").format(
+                    Identifier(self.geom),
+                    Literal(geom_wkt),
+                    Literal(geom_crs))
+            where_conditions.append(geom_clause)
+
+        elif bbox:
+            # -> Go the old way with the bbox and no crs
+            geom_clause = SQL('{} && ST_MakeEnvelope({})').format(
+                Identifier(self.geom), SQL(', ').join(
+                    [Literal(bbox_coord) for bbox_coord in bbox]))
             where_conditions.append(geom_clause)
 
         if where_conditions:
@@ -249,7 +271,8 @@ class PostgreSQLProvider(BaseProvider):
         return SQL(f"ORDER BY {','.join(ret)}")
 
     def query(self, offset=0, limit=10, resulttype='results',
-              bbox=None, bbox_crs=4326, geom_wkt=None, geom_crs=4326, data_crs=None,
+              bbox=None, bbox_crs=None, geom_wkt=None,
+              geom_crs=None, data_crs=None,
               datetime_=None, properties=[], sortby=[],
               select_properties=[], skip_geometry=False, q=None, **kwargs):
         """
@@ -260,11 +283,17 @@ class PostgreSQLProvider(BaseProvider):
         :param offset: starting record to return (default 0)
         :param limit: number of records to return (default 10)
         :param resulttype: return results or hit limit (default results)
-        :param bbox: bounding box [minx,miny,maxx,maxy] to query on (when any)
-        :param bbox_crs: the spatial projection of the provided bounding box, defaults to 4326 like the other providers
-        :param geom_wkt: the geom wkt to query on (when any)
-        :param geom_crs: the spatial projection of the provided geom wkt, defaults to 4326 like the other providers
-        :param data_crs: the spatial projection of the data being queried, as read from the provider configuration
+        :param bbox: bounding box [minx,miny,maxx,maxy] to query on
+        (when specified)
+        :param bbox_crs: the spatial projection of the bounding box
+        (when specified)
+        :param geom_wkt: the geom wkt to query on
+        (when specified)
+        :param geom_crs: the spatial projection of the geom wkt
+        (when specified)
+        :param data_crs: the spatial projection of the data being queried, as
+        read from the provider configuration
+        (when specified).
         :param datetime_: temporal (datestamp or extent)
         :param properties: list of tuples (name, value)
         :param sortby: list of dicts (property, order)
@@ -276,17 +305,6 @@ class PostgreSQLProvider(BaseProvider):
         """
         LOGGER.debug('Querying PostGIS')
 
-        # If there's no geometry and there's a bbox, transform the bbox to a geometry for convenience
-        # It's possible that the bbox has already been converted to a geometry-wkt, earlier, but making sure in this call too as bbox is repeated as input parameter here
-        if not geom_wkt and bbox:
-            # Transform bbox to polygon wkt
-            geom_wkt = "POLYGON(({x_min} {y_min}, {x_min} {y_max}, {x_max} {y_max}, {x_max} {y_min}, {x_min} {y_min}))".format(
-                x_min=bbox[0],
-                y_min=bbox[1],
-                x_max=bbox[2],
-                y_max=bbox[3])
-            geom_crs = bbox_crs
-
         if resulttype == 'hits':
 
             with DatabaseConnection(self.conn_dic,
@@ -296,8 +314,8 @@ class PostgreSQLProvider(BaseProvider):
                 cursor = db.conn.cursor(cursor_factory=RealDictCursor)
 
                 where_clause = self.__get_where_clauses(
-                    properties=properties, geom_wkt=geom_wkt, geom_crs=geom_crs,
-                    data_crs=data_crs)
+                    properties=properties, bbox=bbox, geom_wkt=geom_wkt,
+                    geom_crs=geom_crs, data_crs=data_crs)
 
                 sql_query = SQL("SELECT COUNT(*) as hits from {} {}").\
                     format(Identifier(self.table), where_clause)
@@ -326,8 +344,8 @@ class PostgreSQLProvider(BaseProvider):
                 SQL(",ST_AsGeoJSON({})").format(Identifier(self.geom))
 
             where_clause = self.__get_where_clauses(
-                properties=properties, geom_wkt=geom_wkt, geom_crs=geom_crs,
-                data_crs=data_crs)
+                properties=properties, bbox=bbox, geom_wkt=geom_wkt,
+                geom_crs=geom_crs, data_crs=data_crs)
 
             orderby = self._make_orderby(sortby) if sortby else SQL('')
 
