@@ -37,7 +37,7 @@ class API_CZS(API):
         :returns: the resources that PyGeoAPI should work with
         """
 
-        print("on_load_resources")
+        # print("on_load_resources")
 
         # Open the connection
         with open_conn(self.config["settings"]["database"]) as conn:
@@ -77,7 +77,7 @@ class API_CZS(API):
         return the_resources
 
 
-    def on_filter_spatially(self, collections, geom_wkt, geom_crs):
+    def on_description_filter_spatially(self, collections, geom_wkt, geom_crs):
         """
         Performs our own spatial filter to filter the collections based on a geometry wkt.
 
@@ -88,7 +88,7 @@ class API_CZS(API):
         :returns: the spatially filtered collections (if actually filtering)
         """
 
-        print("on_filter_spatially: filtering?=" + ('true' if geom_wkt else 'false'))
+        # print("on_description_filter_spatially: filtering?=" + ('true' if geom_wkt else 'false'))
         # print("Count before: " + str(len(collections)))
 
         # If filtering spatially using a wkt
@@ -122,7 +122,7 @@ class API_CZS(API):
         :param active_coll: The current collection being finalized
         """
 
-        print("on_build_collection_finalize : "  + collection_data_type + " : " + active_coll['title'])
+        # print("on_build_collection_finalize : "  + collection_data_type + " : " + active_coll['title'])
 
         # Add the theme information to the output
         if 'theme' in input_coll:
