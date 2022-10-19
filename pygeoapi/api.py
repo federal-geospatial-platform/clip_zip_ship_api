@@ -33,7 +33,8 @@
 Returns content from plugins and sets responses.
 """
 
-import asyncio, yaml
+import asyncio
+import yaml
 from collections import OrderedDict
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -806,7 +807,8 @@ class API:
 
         # Stringify
         ymalStringData = yaml.dump(self.config, indent=4,
-                                   allow_unicode=True, default_flow_style=False,
+                                   allow_unicode=True,
+                                   default_flow_style=False,
                                    sort_keys=False)
 
         # Write to file
@@ -824,7 +826,8 @@ class API:
 
         # Also save the OpenAPI file
         content = yaml.safe_dump(get_oas(self.config),
-                                 allow_unicode=True, default_flow_style=False)
+                                 allow_unicode=True,
+                                 default_flow_style=False)
 
         # Write to file
         with open(os.environ.get('PYGEOAPI_OPENAPI'), 'w',
@@ -1060,9 +1063,11 @@ class API:
         # specifying the POST method was used
         return self.describe_collections(request, dataset, "POST")
 
-
+    @gzip
+    @pre_process
+    @jsonldify
     def describe_collections(self, request: Union[APIRequest, Any],
-                             dataset=None, method=str) -> Tuple[dict, int, str]:
+                             dataset=None, method=str) -> Tuple[dict, int, str]:  # noqa
         """
         Provide collection metadata
 
@@ -1099,7 +1104,6 @@ class API:
 
         # Filter by bbox
         collections = self.on_description_filter_spatially(collections, geom, geom_crs) # noqa
-
 
         if all([dataset is not None, dataset not in collections.keys()]):
             msg = 'Collection not found'
@@ -1378,7 +1382,8 @@ class API:
 
             # Finalize building the collection information
             self.on_build_collection_finalize(request.locale,
-                                              collection_data_type, v, collection)
+                                              collection_data_type, v,
+                                              collection)
 
             if dataset is not None and k == dataset:
                 fcm = collection
@@ -1966,7 +1971,6 @@ class API:
             msg = str(err)
             return self.get_exception(
                 400, headers, request.format, 'InvalidParameterValue', msg)
-
 
         LOGGER.debug('Processing datetime parameter')
         datetime_ = request.params.get('datetime')
