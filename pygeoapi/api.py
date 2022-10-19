@@ -679,7 +679,6 @@ class APIRequest:
         return geom, geom_crs, bbox, bbox_crs
 
 
-
 class API:
     """API object"""
 
@@ -1378,7 +1377,7 @@ class API:
                     pass
 
             # Finalize building the collection information
-            self.on_build_collection_finalize(request.locale, 
+            self.on_build_collection_finalize(request.locale,
                                               collection_data_type, v, collection)
 
             if dataset is not None and k == dataset:
@@ -1545,8 +1544,9 @@ class API:
         headers = request.get_response_headers(SYSTEM_LOCALE)
 
         properties = []
-        reserved_fieldnames = ['f', 'lang', 'bbox', 'bbox-crs', 'geom', 'geom-crs',
-                               'limit', 'offset', 'resulttype', 'datetime', 'sortby',
+        reserved_fieldnames = ['f', 'lang', 'bbox', 'bbox-crs',
+                               'geom', 'geom-crs', 'limit', 'offset',
+                               'resulttype', 'datetime', 'sortby',
                                'properties', 'skipGeometry', 'q']
 
         collections = filter_dict_by_key_value(self.config['resources'],
@@ -1723,8 +1723,10 @@ class API:
 
         try:
             content = p.query(offset=offset, limit=limit,
-                              resulttype=resulttype, bbox=bbox, bbox_crs=bbox_crs,
-                              geom_wkt=geom, geom_crs=geom_crs, data_crs=data_crs,
+                              resulttype=resulttype,
+                              bbox=bbox, bbox_crs=bbox_crs,
+                              geom_wkt=geom, geom_crs=geom_crs,
+                              data_crs=data_crs,
                               datetime_=datetime_, properties=properties,
                               sortby=sortby,
                               select_properties=select_properties,
@@ -1986,12 +1988,14 @@ class API:
         LOGGER.debug('Loading provider')
 
         try:
-            p = load_plugin('provider', get_provider_by_type(
-                collections[dataset]['providers'], 'feature'))
+            provider_def = get_provider_by_type(
+                collections[dataset]['providers'], 'feature')
+            p = load_plugin('provider', provider_def)
         except ProviderTypeError:
             try:
-                p = load_plugin('provider', get_provider_by_type(
-                    collections[dataset]['providers'], 'record'))
+                provider_def = get_provider_by_type(
+                    collections[dataset]['providers'], 'record')
+                p = load_plugin('provider', provider_def)
             except ProviderTypeError:
                 msg = 'Invalid provider type'
                 return self.get_exception(
@@ -2116,8 +2120,10 @@ class API:
             if val:
                 filter_ = CQLModel.parse_raw(data)
             content = p.query(offset=offset, limit=limit,
-                              resulttype=resulttype, bbox=bbox, bbox_crs=bbox_crs,
-                              geom_wkt=geom, geom_crs=geom_crs, data_crs=data_crs,
+                              resulttype=resulttype,
+                              bbox=bbox, bbox_crs=bbox_crs,
+                              geom_wkt=geom, geom_crs=geom_crs,
+                              data_crs=data_crs,
                               datetime_=datetime_, properties=properties,
                               sortby=sortby,
                               select_properties=select_properties,

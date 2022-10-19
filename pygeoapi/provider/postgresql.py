@@ -232,7 +232,8 @@ class PostgreSQLProvider(BaseProvider):
             where_conditions.append(geom_clause)
 
         elif geom_wkt and geom_crs:
-            # -> Build the wkt and query the database as-is hoping the crs match
+            # -> Build the wkt and query the database as-is
+            # hoping the crs match
             geom_clause = SQL(
                 "ST_Intersects({}, ST_PolygonFromText({}, {}))").format(
                     Identifier(self.geom),
