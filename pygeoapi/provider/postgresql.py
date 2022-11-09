@@ -5,12 +5,10 @@
 #          Mary Bucknell <mbucknell@usgs.gov>
 #          John A Stevenson <jostev@bgs.ac.uk>
 #          Colin Blackburn <colb@bgs.ac.uk>
-#          Francesco Bartoli <xbartolone@gmail.com>
 #
 # Copyright (c) 2018 Jorge Samuel Mendes de Jesus
-# Copyright (c) 2023 Tom Kralidis
+# Copyright (c) 2021 Tom Kralidis
 # Copyright (c) 2022 John A Stevenson and Colin Blackburn
-# Copyright (c) 2023 Francesco Bartoli
 #
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -49,25 +47,20 @@
 #  psql -U postgres -h 127.0.0.1 -p 5432 test
 
 import logging
+from pygeoapi.provider.base import BaseProvider, \
+    ProviderConnectionError, ProviderQueryError, ProviderItemNotFoundError
 
-from copy import deepcopy
-from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
-from geoalchemy2.functions import ST_MakeEnvelope
-from geoalchemy2.shape import to_shape
-from pygeofilter.backends.sqlalchemy.evaluate import to_filter
-import pyproj
-import shapely
-from sqlalchemy import create_engine, MetaData, PrimaryKeyConstraint, asc, desc
-from sqlalchemy.engine import URL
+from sqlalchemy import create_engine, MetaData, PrimaryKeyConstraint, asc, desc  # noqa
 from sqlalchemy.exc import InvalidRequestError, OperationalError
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session, load_only
 from sqlalchemy.sql.expression import and_
+from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
+from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID
+from pygeofilter.backends.sqlalchemy.evaluate import to_filter
 
-from pygeoapi.provider.base import BaseProvider, \
-    ProviderConnectionError, ProviderQueryError, ProviderItemNotFoundError
-from pygeoapi.util import get_transform_from_crs
-
+import shapely
+from geoalchemy2.shape import to_shape
 
 _ENGINE_STORE = {}
 _TABLE_MODEL_STORE = {}
@@ -97,21 +90,28 @@ class PostgreSQLProvider(BaseProvider):
         self.id_field = provider_def['id_field']
         self.geom = provider_def.get('geom_field', 'geom')
 
-        LOGGER.debug(f'Name: {self.name}')
-        LOGGER.debug(f'Table: {self.table}')
-        LOGGER.debug(f'ID field: {self.id_field}')
-        LOGGER.debug(f'Geometry field: {self.geom}')
+        LOGGER.debug('Name: {}'.format(self.name))
+        LOGGER.debug('Table: {}'.format(self.table))
+        LOGGER.debug('ID field: {}'.format(self.id_field))
+        LOGGER.debug('Geometry field: {}'.format(self.geom))
 
         # Read table information from database
         self._store_db_parameters(provider_def['data'])
         self._engine, self.table_model = self._get_engine_and_table_model()
-        LOGGER.debug(f'DB connection: {repr(self._engine.url)}')
+        LOGGER.debug('DB connection: {}'.format(repr(self._engine.url)))
+
+        # Read the table fields
         self.fields = self.get_fields()
+        LOGGER.debug('Fields: {}'.format(self.fields))
+
+        # Read the table SRID
+        self.srid = self.get_srid()
+        LOGGER.debug('SRID: {}'.format(self.srid))
 
     def query(self, offset=0, limit=10, resulttype='results',
-              bbox=[], datetime_=None, properties=[], sortby=[],
+              bbox=[], bbox_crs=None, datetime_=None, properties=[], sortby=[],
               select_properties=[], skip_geometry=False, q=None,
-              filterq=None, crs_transform_spec=None, **kwargs):
+              filterq=None, **kwargs):
         """
         Query Postgis for all the content.
         e,g: http://localhost:5000/collections/hotosm_bdi_waterways/items?
@@ -121,6 +121,7 @@ class PostgreSQLProvider(BaseProvider):
         :param limit: number of records to return (default 10)
         :param resulttype: return results or hit limit (default results)
         :param bbox: bounding box [minx,miny,maxx,maxy]
+        :param bbox_crs: bounding box crs (default unspecified)
         :param datetime_: temporal (datestamp or extent)
         :param properties: list of tuples (name, value)
         :param sortby: list of dicts (property, order)
@@ -128,20 +129,19 @@ class PostgreSQLProvider(BaseProvider):
         :param skip_geometry: bool of whether to skip geometry (default False)
         :param q: full-text search term(s)
         :param filterq: CQL query as text string
-        :param crs_transform_spec: `CrsTransformSpec` instance, optional
 
-        :returns: GeoJSON FeatureCollection
+        :returns: GeoJSON FeaturesCollection
         """
+        LOGGER.debug('Querying PostGIS')
 
-        LOGGER.debug('Preparing filters')
+        # Prepare filters
         property_filters = self._get_property_filters(properties)
         cql_filters = self._get_cql_filters(filterq)
-        bbox_filter = self._get_bbox_filter(bbox)
+        bbox_filter = self._get_bbox_filter(bbox, bbox_crs)
         order_by_clauses = self._get_order_by_clauses(sortby, self.table_model)
         selected_properties = self._select_properties_clause(select_properties,
                                                              skip_geometry)
 
-        LOGGER.debug('Querying PostGIS')
         # Execute query within self-closing database Session context
         with Session(self._engine) as session:
             results = (session.query(self.table_model)
@@ -152,29 +152,24 @@ class PostgreSQLProvider(BaseProvider):
                        .options(selected_properties)
                        .offset(offset))
 
-            matched = results.count()
-            if limit < matched:
-                returned = limit
-            else:
-                returned = matched
-
-            LOGGER.debug(f'Found {matched} result(s)')
-
-            LOGGER.debug('Preparing response')
+            # Prepare and return feature collection response
             response = {
                 'type': 'FeatureCollection',
-                'features': [],
-                'numberMatched': matched,
-                'numberReturned': returned
+                'features': []
             }
 
-            if resulttype == "hits" or not results:
-                response['numberReturned'] = 0
+            if resulttype == "hits":
+                # User requested hit count
+                response['numberMatched'] = results.count()
                 return response
-            crs_transform_out = self._get_crs_transform(crs_transform_spec)
+
+            if not results:
+                # Empty response
+                return response
+
             for item in results.limit(limit):
                 response['features'].append(
-                    self._sqlalchemy_to_feature(item, crs_transform_out)
+                    self._sqlalchemy_to_feature(item)
                 )
 
         return response
@@ -195,15 +190,29 @@ class PostgreSQLProvider(BaseProvider):
 
         return fields
 
-    def get(self, identifier, crs_transform_spec=None, **kwargs):
+    def get_srid(self):
+        """
+        Return the srid of the underlying table
+
+        :returns: integer of the SRID
+        """
+        LOGGER.debug('Get SRID')
+
+        # Execute query within self-closing database Session context
+        srid = None
+        with Session(self._engine) as session:
+            srid = session.scalar(
+                       Find_SRID(self.schema, self.table, self.geom))
+        return srid
+
+    def get(self, identifier, **kwargs):
         """
         Query the provider for a specific
         feature id e.g: /collections/hotosm_bdi_waterways/items/13990765
 
         :param identifier: feature id
-        :param crs_transform_spec: `CrsTransformSpec` instance, optional
 
-        :returns: GeoJSON FeatureCollection
+        :returns: GeoJSON FeaturesCollection
         """
         LOGGER.debug(f'Get item by ID: {identifier}')
 
@@ -215,16 +224,7 @@ class PostgreSQLProvider(BaseProvider):
             if item is None:
                 msg = f"No such item: {self.id_field}={identifier}."
                 raise ProviderItemNotFoundError(msg)
-            crs_transform_out = self._get_crs_transform(crs_transform_spec)
-            feature = self._sqlalchemy_to_feature(item, crs_transform_out)
-
-            # Drop non-defined properties
-            if self.properties:
-                props = feature['properties']
-                dropping_keys = deepcopy(props).keys()
-                for item in dropping_keys:
-                    if item not in self.properties:
-                        props.pop(item)
+            feature = self._sqlalchemy_to_feature(item)
 
             # Add fields for previous and next items
             id_field = getattr(self.table_model, self.id_field)
@@ -249,6 +249,7 @@ class PostgreSQLProvider(BaseProvider):
         self.db_port = parameters.get('port', 5432)
         self.db_name = parameters.get('dbname')
         self.db_search_path = parameters.get('search_path', ['public'])
+        self.schema = self.db_search_path[0]
         self._db_password = parameters.get('password')
 
     def _get_engine_and_table_model(self):
@@ -264,13 +265,11 @@ class PostgreSQLProvider(BaseProvider):
         try:
             engine = _ENGINE_STORE[engine_store_key]
         except KeyError:
-            conn_str = URL.create(
-                'postgresql+psycopg2',
-                username=self.db_user,
-                password=self._db_password,
-                host=self.db_host,
-                port=self.db_port,
-                database=self.db_name
+            conn_str = (
+                'postgresql+psycopg2://'
+                f'{self.db_user}:{self._db_password}@'
+                f'{self.db_host}:{self.db_port}/'
+                f'{self.db_name}'
             )
             engine = create_engine(
                 conn_str,
@@ -300,14 +299,13 @@ class PostgreSQLProvider(BaseProvider):
 
         # Look for table in the first schema in the search path
         try:
-            schema = self.db_search_path[0]
-            metadata.reflect(schema=schema, only=[self.table], views=True)
+            metadata.reflect(schema=self.schema, only=[self.table], views=True)
         except OperationalError:
             msg = (f"Could not connect to {repr(engine.url)} "
                    "(password hidden).")
             raise ProviderConnectionError(msg)
         except InvalidRequestError:
-            msg = (f"Table '{self.table}' not found in schema '{schema}' "
+            msg = (f"Table '{self.table}' not found in schema '{self.schema}' "
                    f"on {repr(engine.url)}.")
             raise ProviderQueryError(msg)
 
@@ -315,43 +313,24 @@ class PostgreSQLProvider(BaseProvider):
         # It is necessary to add the primary key constraint because SQLAlchemy
         # requires it to reflect the table, but a view in a PostgreSQL database
         # does not have a primary key defined.
-        sqlalchemy_table_def = metadata.tables[f'{schema}.{self.table}']
+        sqlalchemy_table_def = metadata.tables[f'{self.schema}.{self.table}']
+
         try:
             sqlalchemy_table_def.append_constraint(
                 PrimaryKeyConstraint(self.id_field)
             )
         except KeyError:
             msg = (f"No such id_field column ({self.id_field}) on "
-                   f"{schema}.{self.table}.")
+                   f"{self.schema}.{self.table}.")
             raise ProviderQueryError(msg)
 
         Base = automap_base(metadata=metadata)
-        Base.prepare(
-            name_for_scalar_relationship=self._name_for_scalar_relationship,
-        )
+        Base.prepare()
         TableModel = getattr(Base.classes, self.table)
 
         return TableModel
 
-    @staticmethod
-    def _name_for_scalar_relationship(
-        base, local_cls, referred_cls, constraint,
-    ):
-        """Function used when automapping classes and relationships from
-        database schema and fixes potential naming conflicts.
-        """
-        name = referred_cls.__name__.lower()
-        local_table = local_cls.__table__
-        if name in local_table.columns:
-            newname = name + '_'
-            LOGGER.debug(
-                f'Already detected column name {name!r} in table '
-                f'{local_table!r}. Using {newname!r} for relationship name.'
-            )
-            return newname
-        return name
-
-    def _sqlalchemy_to_feature(self, item, crs_transform_out=None):
+    def _sqlalchemy_to_feature(self, item):
         feature = {
             'type': 'Feature'
         }
@@ -366,8 +345,6 @@ class PostgreSQLProvider(BaseProvider):
         if feature['properties'].get(self.geom):
             wkb_geom = feature['properties'].pop(self.geom)
             shapely_geom = to_shape(wkb_geom)
-            if crs_transform_out is not None:
-                shapely_geom = crs_transform_out(shapely_geom)
             geojson_geom = shapely.geometry.mapping(shapely_geom)
             feature['geometry'] = geojson_geom
         else:
@@ -415,12 +392,23 @@ class PostgreSQLProvider(BaseProvider):
 
         return property_filters
 
-    def _get_bbox_filter(self, bbox):
+    def _get_bbox_filter(self, bbox, bbox_crs):
         if not bbox:
             return True  # Let everything through
 
-        # Convert bbx to SQL Alchemy clauses
-        envelope = ST_MakeEnvelope(*bbox)
+        # If a bbox_crs is specified
+        if bbox_crs:
+            # Append the srid to the bbox coordinates
+            bbox.append(int(bbox_crs))
+            # Make the bbox envelope
+            envelope = ST_MakeEnvelope(*bbox)
+            # Project the bbox's to the SRID of the table
+            envelope = ST_Transform(envelope, self.srid)
+
+        else:
+            # Make the bbox envelope assuming the same crs as the data
+            envelope = ST_MakeEnvelope(*bbox)
+
         geom_column = getattr(self.table_model, self.geom)
         bbox_filter = geom_column.intersects(envelope)
 
@@ -452,13 +440,3 @@ class PostgreSQLProvider(BaseProvider):
         selected_properties_clause = load_only(*selected_columns)
 
         return selected_properties_clause
-
-    def _get_crs_transform(self, crs_transform_spec=None):
-        if crs_transform_spec is not None:
-            crs_transform = get_transform_from_crs(
-                pyproj.CRS.from_wkt(crs_transform_spec.source_crs_wkt),
-                pyproj.CRS.from_wkt(crs_transform_spec.target_crs_wkt),
-            )
-        else:
-            crs_transform = None
-        return crs_transform
