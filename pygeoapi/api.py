@@ -3,9 +3,12 @@
 # Authors: Tom Kralidis <tomkralidis@gmail.com>
 #          Francesco Bartoli <xbartolone@gmail.com>
 #          Sander Schaminee <sander.schaminee@geocat.net>
+#          John A Stevenson <jostev@bgs.ac.uk>
+#          Colin Blackburn <colb@bgs.ac.uk>
 #
 # Copyright (c) 2022 Tom Kralidis
 # Copyright (c) 2020 Francesco Bartoli
+# Copyright (c) 2022 John A Stevenson and Colin Blackburn
 #
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -33,8 +36,7 @@
 Returns content from plugins and sets responses.
 """
 
-import asyncio
-import yaml
+import asyncio, yaml
 from collections import OrderedDict
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -49,6 +51,8 @@ import urllib.parse
 import uuid
 
 from dateutil.parser import parse as dateparse
+from pygeofilter.parsers.ecql import parse as parse_ecql_text
+from pygeofilter.parsers.cql_json import parse as parse_cql_json
 import pytz
 from shapely.errors import WKTReadingError
 from shapely.wkt import loads as shapely_loads
@@ -63,8 +67,8 @@ from pygeoapi.process.base import ProcessorExecuteError
 from pygeoapi.plugin import load_plugin, PLUGINS
 from pygeoapi.provider.base import (
     ProviderGenericError, ProviderConnectionError, ProviderNotFoundError,
-    ProviderInvalidQueryError, ProviderNoDataError, ProviderQueryError,
-    ProviderItemNotFoundError, ProviderTypeError)
+    ProviderInvalidDataError, ProviderInvalidQueryError, ProviderNoDataError,
+    ProviderQueryError, ProviderItemNotFoundError, ProviderTypeError)
 
 from pygeoapi.provider.tile import (ProviderTileNotFoundError,
                                     ProviderTileQueryError,
@@ -109,7 +113,8 @@ CONFORMANCE = {
         'http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/core',
         'http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/oas30',
         'http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/html',
-        'http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/geojson'
+        'http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/geojson',
+        'http://www.opengis.net/spec/ogcapi-features-4/1.0/conf/create-replace-delete'  # noqa
     ],
     'coverage': [
         'http://www.opengis.net/spec/ogcapi-coverages-1/1.0/conf/core',
@@ -408,7 +413,7 @@ class APIRequest:
 
         # Format not specified: get from Accept headers (MIME types)
         # e.g. format_ = 'text/html'
-        h = headers.get('accept', headers.get('Accept', '')).strip() # noqa
+        h = headers.get('accept', headers.get('Accept', '')).strip()  # noqa
         (fmts, mimes) = zip(*FORMAT_TYPES.items())
         # basic support for complex types (i.e. with "q=0.x")
         for type_ in (t.split(';')[0].strip() for t in h.split(',') if t):
@@ -635,49 +640,27 @@ class APIRequest:
 
         return q_bbox
 
-    def read_spatial_filter(self, method: str):
+    def read_bbox_parameters(self, method: str):
         """
-        Reads a geometry or bbox spatial filter from the service end point.
-        When a bbox is specified and no geometry is specified, this function
-        also converts the bbox (and its crs) to a geometry (and its crs) for
-        convenience when working with a spatial filter.
+        Reads a bbox and bbox-crs filters from the service end point.
         This function reads spatial filter information in either GET or POST
         http methods.
         :param method: indicates if the parameter value should be read from GET
         or POST fashion. Possible values are "GET" or "POST".
         :returns: an array of spatial filters as provided in the service
-        request (geom, geom-crs, bbox, bbox-crs).
+        request (bbox, bbox-crs).
         """
 
-        # Read the geometry if any
-        geom = self.read_param(method, 'geom')
-
-        # Read the geometry crs if any
-        geom_crs = self.read_param(method, 'geom-crs')
-
-        # If no geom_wkt
         bbox = None
         bbox_crs = None
-        if not geom:
-            # Read the bbox if any
-            bbox = self.read_bbox(method)
 
-            # Read the bbox crs if any
-            bbox_crs = self.read_param(method, 'bbox-crs')
+        # Read the bbox if any
+        bbox = self.read_bbox(method)
 
-            # If a bbox is set
-            if bbox:
-                # Transform bbox to polygon wkt
-                geom = """POLYGON(({x_min} {y_min}, {x_min} {y_max},
-                                   {x_max} {y_max}, {x_max} {y_min},
-                                   {x_min} {y_min}))""".format(
-                    x_min=bbox[0],
-                    y_min=bbox[1],
-                    x_max=bbox[2],
-                    y_max=bbox[3])
-                geom_crs = bbox_crs
+        # Read the bbox crs if any
+        bbox_crs = self.read_param(method, 'bbox-crs')
 
-        return geom, geom_crs, bbox, bbox_crs
+        return bbox, bbox_crs
 
 
 class API:
@@ -1089,21 +1072,23 @@ class API:
         collections = filter_dict_by_key_value(self.config['resources'],
                                                'type', 'collection')
 
-        geom = None
-        geom_crs = None
         bbox = None
-        bbox_crs = None
+        bboxcrs = None
         try:
             # Read the spatial filter parameters from the request
-            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter(method) # noqa
+            bbox, bbox_crs = request.read_bbox_parameters(method)
 
         except ValueError as err:
             msg = str(err)
             return self.get_exception(
                 400, headers, request.format, 'InvalidParameterValue', msg)
 
+        # Describe more collections
+        collections = self.on_describe_collections(collections, bbox, bbox_crs)
+
         # Filter by bbox
-        collections = self.on_description_filter_spatially(collections, geom, geom_crs) # noqa
+        collections = self.on_filter_spatially(collections, bbox, bbox_crs or 4326)
+
 
         if all([dataset is not None, dataset not in collections.keys()]):
             msg = 'Collection not found'
@@ -1179,6 +1164,18 @@ class API:
             LOGGER.debug('Adding JSON and HTML link relations')
             collection['links'].append({
                 'type': FORMAT_TYPES[F_JSON],
+                'rel': 'root',
+                'title': 'The landing page of this server as JSON',
+                'href': '{}?f={}'.format(self.config['server']['url'], F_JSON)
+            })
+            collection['links'].append({
+                'type': FORMAT_TYPES[F_HTML],
+                'rel': 'root',
+                'title': 'The landing page of this server as HTML',
+                'href': '{}?f={}'.format(self.config['server']['url'], F_HTML)
+            })
+            collection['links'].append({
+                'type': FORMAT_TYPES[F_JSON],
                 'rel': request.get_linkrel(F_JSON),
                 'title': 'This document as JSON',
                 'href': '{}/{}?f={}'.format(
@@ -1199,9 +1196,9 @@ class API:
                     self.get_collections_url(), k, F_HTML)
             })
 
+            collection['itemType'] = collection_data_type
             if collection_data_type in ['feature', 'record', 'tile']:
                 # TODO: translate
-                collection['itemType'] = collection_data_type
                 LOGGER.debug('Adding feature/record based links')
                 collection['links'].append({
                     'type': FORMAT_TYPES[F_JSON],
@@ -1525,6 +1522,8 @@ class API:
 
             return headers, 200, content
 
+        headers['Content-Type'] = 'application/schema+json'
+
         return headers, 200, to_json(queryables, self.pretty_print)
 
     @gzip
@@ -1550,9 +1549,10 @@ class API:
 
         properties = []
         reserved_fieldnames = ['f', 'lang', 'bbox', 'bbox-crs',
-                               'geom', 'geom-crs', 'limit', 'offset',
+                               'limit', 'offset',
                                'resulttype', 'datetime', 'sortby',
-                               'properties', 'skipGeometry', 'q']
+                               'properties', 'skipGeometry', 'q',
+                               'filter', 'filter-lang']
 
         collections = filter_dict_by_key_value(self.config['resources'],
                                                'type', 'collection')
@@ -1566,7 +1566,7 @@ class API:
 
         LOGGER.debug('Processing offset parameter')
         try:
-            offset = int(request.params.get('offset'))
+            offset = int(request.params.get('offset')) if request.params.get('offset') else 0
             if offset < 0:
                 msg = 'offset value should be positive or zero'
                 return self.get_exception(
@@ -1598,15 +1598,13 @@ class API:
 
         resulttype = request.params.get('resulttype') or 'results'
 
-        LOGGER.debug('Processing spatial filter parameters')
+        LOGGER.debug('Processing bbox and bbox-crs parameters')
 
-        geom = None
-        geom_crs = None
         bbox = None
         bbox_crs = None
         try:
             # Read the spatial filter parameters from the request
-            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter("GET") # noqa
+            bbox, bbox_crs = request.read_bbox_parameters("GET")  # noqa
 
         except ValueError as err:
             msg = str(err)
@@ -1701,13 +1699,29 @@ class API:
         else:
             skip_geometry = False
 
+        LOGGER.debug('processing filter parameter')
+        cql_text = request.params.get('filter')
+        if cql_text is not None:
+            try:
+                filter_ = parse_ecql_text(cql_text)
+            except Exception as err:
+                LOGGER.error(err)
+                msg = f'Bad CQL string : {cql_text}'
+                return self.get_exception(
+                    400, headers, request.format, 'InvalidParameterValue', msg)
+        else:
+            filter_ = None
+
+        LOGGER.debug('Processing filter-lang parameter')
+        filter_lang = request.params.get('filter-lang')
+        # Currently only cql-text is handled, but it is optional
+        if filter_lang not in [None, 'cql-text']:
+            msg = 'Invalid filter language'
+            return self.get_exception(
+                400, headers, request.format, 'InvalidParameterValue', msg)
+
         # Get provider locale (if any)
         prv_locale = l10n.get_plugin_locale(provider_def, request.raw_locale)
-
-        # Get crs of the data
-        data_crs = None
-        if 'crs' in provider_def:
-            data_crs = provider_def["crs"]
 
         LOGGER.debug('Querying provider')
         LOGGER.debug('offset: {}'.format(offset))
@@ -1716,27 +1730,24 @@ class API:
         LOGGER.debug('sortby: {}'.format(sortby))
         LOGGER.debug('bbox: {}'.format(bbox))
         LOGGER.debug('bbox-crs: {}'.format(bbox_crs))
-        LOGGER.debug('geom: {}'.format(geom))
-        LOGGER.debug('geom-crs: {}'.format(geom_crs))
-        LOGGER.debug('data-crs: {}'.format(data_crs))
         LOGGER.debug('datetime: {}'.format(datetime_))
         LOGGER.debug('properties: {}'.format(properties))
         LOGGER.debug('select properties: {}'.format(select_properties))
         LOGGER.debug('skipGeometry: {}'.format(skip_geometry))
         LOGGER.debug('language: {}'.format(prv_locale))
         LOGGER.debug('q: {}'.format(q))
+        LOGGER.debug('cql_text: {}'.format(cql_text))
+        LOGGER.debug('filter-lang: {}'.format(filter_lang))
 
         try:
             content = p.query(offset=offset, limit=limit,
-                              resulttype=resulttype,
-                              bbox=bbox, bbox_crs=bbox_crs,
-                              geom_wkt=geom, geom_crs=geom_crs,
-                              data_crs=data_crs,
+                              resulttype=resulttype, bbox=bbox,
+                              bbox_crs=bbox_crs,
                               datetime_=datetime_, properties=properties,
                               sortby=sortby,
                               select_properties=select_properties,
                               skip_geometry=skip_geometry,
-                              q=q, language=prv_locale)
+                              q=q, language=prv_locale, filterq=filter_)
         except ProviderConnectionError as err:
             LOGGER.error(err)
             msg = 'connection error (check logs)'
@@ -1845,6 +1856,7 @@ class API:
                                          'collections/items/index.html',
                                          content, request.locale)
             return headers, 200, content
+
         elif request.format == 'csv':  # render
             formatter = load_plugin('formatter',
                                     {'name': 'CSV', 'geom': True})
@@ -1957,20 +1969,19 @@ class API:
 
         resulttype = request.params.get('resulttype') or 'results'
 
-        LOGGER.debug('Processing spatial filter parameters')
+        LOGGER.debug('Processing bbox and bbox-crs parameters')
 
-        geom = None
-        geom_crs = None
         bbox = None
         bbox_crs = None
         try:
             # Read the spatial filter parameters from the request
-            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter("POST") # noqa
+            bbox, bbox_crs = request.read_bbox_parameters("POST")  # noqa
 
         except ValueError as err:
             msg = str(err)
             return self.get_exception(
                 400, headers, request.format, 'InvalidParameterValue', msg)
+
 
         LOGGER.debug('Processing datetime parameter')
         datetime_ = request.params.get('datetime')
@@ -2070,17 +2081,10 @@ class API:
 
         LOGGER.debug('Processing filter-lang parameter')
         filter_lang = request.params.get('filter-lang')
-        if filter_lang == 'cql-json':  # @TODO add check from the configuration
-            val = filter_lang
-        else:
+        if filter_lang != 'cql-json':  # @TODO add check from the configuration
             msg = 'Invalid filter language'
             return self.get_exception(
                 400, headers, request.format, 'InvalidParameterValue', msg)
-
-        # Get crs of the data
-        data_crs = None
-        if 'crs' in provider_def:
-            data_crs = provider_def["crs"]
 
         LOGGER.debug('Querying provider')
         LOGGER.debug('offset: {}'.format(offset))
@@ -2089,9 +2093,6 @@ class API:
         LOGGER.debug('sortby: {}'.format(sortby))
         LOGGER.debug('bbox: {}'.format(bbox))
         LOGGER.debug('bbox-crs: {}'.format(bbox_crs))
-        LOGGER.debug('geom: {}'.format(geom))
-        LOGGER.debug('geom-crs: {}'.format(geom_crs))
-        LOGGER.debug('data-crs: {}'.format(data_crs))
         LOGGER.debug('datetime: {}'.format(datetime_))
         LOGGER.debug('properties: {}'.format(select_properties))
         LOGGER.debug('skipGeometry: {}'.format(skip_geometry))
@@ -2115,29 +2116,160 @@ class API:
             return self.get_exception(
                 400, headers, request.format, 'MissingParameterValue', msg)
 
+        filter_ = None
         try:
             # Parse bytes data, if applicable
             data = request.data.decode()
             LOGGER.debug(data)
-            # @TODO validation function
-            filter_ = None
-            if val:
+        except UnicodeDecodeError as err:
+            LOGGER.error(err)
+            msg = 'Unicode error in data'
+            return self.get_exception(
+                400, headers, request.format, 'InvalidParameterValue', msg)
+
+        # FIXME: remove testing backend in use once CQL support is normalized
+        if p.name == 'PostgreSQL':
+            LOGGER.debug('processing PostgreSQL CQL_JSON data')
+            try:
+                filter_ = parse_cql_json(data)
+            except Exception as err:
+                LOGGER.error(err)
+                msg = f'Bad CQL string : {data}'
+                return self.get_exception(
+                    400, headers, request.format,
+                    'InvalidParameterValue', msg)
+        else:
+            LOGGER.debug('processing Elasticsearch CQL_JSON data')
+            try:
                 filter_ = CQLModel.parse_raw(data)
+            except Exception as err:
+                LOGGER.error(err)
+                msg = f'Bad CQL string : {data}'
+                return self.get_exception(
+                    400, headers, request.format,
+                    'InvalidParameterValue', msg)
+
+        try:
             content = p.query(offset=offset, limit=limit,
-                              resulttype=resulttype,
-                              bbox=bbox, bbox_crs=bbox_crs,
-                              geom_wkt=geom, geom_crs=geom_crs,
-                              data_crs=data_crs,
+                              resulttype=resulttype, bbox=bbox,
+                              bbox_crs=bbox_crs,
                               datetime_=datetime_, properties=properties,
                               sortby=sortby,
                               select_properties=select_properties,
                               skip_geometry=skip_geometry,
                               q=q,
                               filterq=filter_)
-        except (UnicodeDecodeError, AttributeError):
-            pass
+        except ProviderConnectionError as err:
+            LOGGER.error(err)
+            msg = 'connection error (check logs)'
+            return self.get_exception(
+                500, headers, request.format, 'NoApplicableCode', msg)
+        except ProviderQueryError as err:
+            LOGGER.error(err)
+            msg = 'query error (check logs)'
+            return self.get_exception(
+                500, headers, request.format, 'NoApplicableCode', msg)
+        except ProviderGenericError as err:
+            LOGGER.error(err)
+            msg = 'generic error (check logs)'
+            return self.get_exception(
+                500, headers, request.format, 'NoApplicableCode', msg)
 
         return headers, 200, to_json(content, self.pretty_print)
+
+    @gzip
+    @pre_process
+    def manage_collection_item(
+            self, request: Union[APIRequest, Any],
+            action, dataset, identifier=None) -> Tuple[dict, int, str]:
+        """
+        Adds an item to a collection
+
+        :param request: A request object
+        :param dataset: dataset name
+
+        :returns: tuple of headers, status code, content
+        """
+
+        if not request.is_valid(PLUGINS['formatter'].keys()):
+            return self.get_format_exception(request)
+
+        # Set Content-Language to system locale until provider locale
+        # has been determined
+        headers = request.get_response_headers(SYSTEM_LOCALE)
+
+        collections = filter_dict_by_key_value(self.config['resources'],
+                                               'type', 'collection')
+
+        if dataset not in collections.keys():
+            msg = 'Collection not found'
+            LOGGER.error(msg)
+            return self.get_exception(
+                404, headers, request.format, 'NotFound', msg)
+
+        LOGGER.debug('Loading provider')
+        try:
+            provider_def = get_provider_by_type(
+                collections[dataset]['providers'], 'feature')
+            p = load_plugin('provider', provider_def)
+        except ProviderTypeError:
+            try:
+                provider_def = get_provider_by_type(
+                    collections[dataset]['providers'], 'record')
+                p = load_plugin('provider', provider_def)
+            except ProviderTypeError:
+                msg = 'Invalid provider type'
+                LOGGER.error(msg)
+                return self.get_exception(
+                    400, headers, request.format, 'InvalidParameterValue', msg)
+
+        if not p.editable:
+            msg = 'Collection is not editable'
+            LOGGER.error(msg)
+            return self.get_exception(
+                400, headers, request.format, 'InvalidParameterValue', msg)
+
+        if action in ['create', 'update'] and not request.data:
+            msg = 'No data found'
+            LOGGER.error(msg)
+            return self.get_exception(
+                400, headers, request.format, 'InvalidParameterValue', msg)
+
+        if action == 'create':
+            LOGGER.debug('Creating item')
+            try:
+                identifier = p.create(request.data)
+            except (ProviderInvalidDataError, TypeError) as err:
+                msg = str(err)
+                return self.get_exception(
+                    400, headers, request.format, 'InvalidParameterValue', msg)
+
+            headers['Location'] = '{}/{}/items/{}'.format(
+                self.get_collections_url(), dataset, identifier)
+
+            return headers, 201, ''
+
+        if action == 'update':
+            LOGGER.debug('Updating item')
+            try:
+                _ = p.update(identifier, request.data)
+            except (ProviderInvalidDataError, TypeError) as err:
+                msg = str(err)
+                return self.get_exception(
+                    400, headers, request.format, 'InvalidParameterValue', msg)
+
+            return headers, 204, ''
+
+        if action == 'delete':
+            LOGGER.debug('Deleting item')
+            try:
+                _ = p.delete(identifier)
+            except ProviderGenericError as err:
+                msg = str(err)
+                return self.get_exception(
+                    400, headers, request.format, 'InvalidParameterValue', msg)
+
+            return headers, 200, ''
 
     @gzip
     @pre_process
@@ -2225,6 +2357,16 @@ class API:
             content['links'] = []
 
         content['links'].extend([{
+            'type': FORMAT_TYPES[F_JSON],
+            'rel': 'root',
+            'title': 'The landing page of this server as JSON',
+            'href': '{}?f={}'.format(self.config['server']['url'], F_JSON)
+            }, {
+            'type': FORMAT_TYPES[F_HTML],
+            'rel': 'root',
+            'title': 'The landing page of this server as HTML',
+            'href': '{}?f={}'.format(self.config['server']['url'], F_HTML)
+            }, {
             'rel': request.get_linkrel(F_JSON),
             'type': 'application/geo+json',
             'title': 'This document as GeoJSON',
@@ -2332,28 +2474,21 @@ class API:
             return self.get_exception(
                 500, headers, format_, 'NoApplicableCode', msg)
 
-        LOGGER.debug('Processing spatial filter parameters')
+        LOGGER.debug('Processing bbox and bbox-crs parameters')
 
-        geom = None
-        geom_crs = None
         bbox = None
         bbox_crs = None
         try:
             # Read the spatial filter parameters from the request
-            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter("GET") # noqa
+            bbox, bbox_crs = request.read_bbox_parameters("GET")  # noqa
 
         except ValueError as err:
             msg = str(err)
             return self.get_exception(
                 400, headers, request.format, 'InvalidParameterValue', msg)
 
-        if geom:
-            query_args['geom_wkt'] = geom
-        if geom_crs:
-            query_args['geom_crs'] = geom_crs
-        if bbox:
-            query_args['bbox'] = bbox
-        if bbox_crs:
+        query_args['bbox'] = bbox
+        if bbox_crs is not None:
             query_args['bbox_crs'] = bbox_crs
 
         LOGGER.debug('Processing datetime parameter')
@@ -2590,12 +2725,8 @@ class API:
                 500, headers, request.format, 'NoApplicableCode', msg)
 
         tiles = {
-            'title': dataset,
-            'description': l10n.translate(
-                self.config['resources'][dataset]['description'],
-                SYSTEM_LOCALE),
             'links': [],
-            'tileMatrixSetLinks': []
+            'tilesets': []
         }
 
         tiles['links'].append({
@@ -2629,7 +2760,36 @@ class API:
         for service in tile_services['links']:
             tiles['links'].append(service)
 
-        tiles['tileMatrixSetLinks'] = p.get_tiling_schemes()
+        tiling_schemes = p.get_tiling_schemes()
+
+        for matrix in tiling_schemes:
+            tile_matrix = {
+                'title': dataset,
+                'tileMatrixSetURI': matrix['tileMatrixSetURI'],
+                'crs': matrix['crs'],
+                'dataType': 'vector',
+                'links': []
+            }
+            tile_matrix['links'].append({
+                'type': FORMAT_TYPES[F_JSON],
+                'rel': request.get_linkrel(F_JSON),
+                'title': '{} - {} - {}'.format(
+                    dataset, matrix['tileMatrixSet'], F_JSON),
+                'href': '{}/{}/tiles/{}?f={}'.format(
+                    self.get_collections_url(), dataset,
+                    matrix['tileMatrixSet'], F_JSON)
+            })
+            tile_matrix['links'].append({
+                'type': FORMAT_TYPES[F_HTML],
+                'rel': request.get_linkrel(F_HTML),
+                'title': '{} - {} - {}'.format(
+                    dataset, matrix['tileMatrixSet'], F_HTML),
+                'href': '{}/{}/tiles/{}?f={}'.format(
+                    self.get_collections_url(), dataset,
+                    matrix['tileMatrixSet'], F_HTML)
+            })
+            tiles['tilesets'].append(tile_matrix)
+
         metadata_format = p.options['metadata_format']
 
         if request.format == F_HTML:  # render
@@ -3582,7 +3742,7 @@ class API:
             400, headers, request.format, 'InvalidParameterValue', msg)
 
     def get_collections_url(self):
-        return '{}/collections'.format((self.config['server']['url']))
+        return '{}/collections'.format(self.config['server']['url'])
 
 
 def validate_bbox(value=None) -> list:
