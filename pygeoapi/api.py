@@ -1083,11 +1083,8 @@ class API:
             return self.get_exception(
                 400, headers, request.format, 'InvalidParameterValue', msg)
 
-        # Describe more collections
-        collections = self.on_describe_collections(collections, bbox, bbox_crs)
-
         # Filter by bbox
-        collections = self.on_filter_spatially(collections, bbox, bbox_crs or 4326)
+        collections = self.on_description_filter_spatially(collections, bbox, bbox_crs or 4326)
 
 
         if all([dataset is not None, dataset not in collections.keys()]):
