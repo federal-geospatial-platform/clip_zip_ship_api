@@ -1444,16 +1444,10 @@ class API:
             # Read the spatial filter parameters from the request
             bbox, bbox_crs = request.read_bbox_parameters("GET")  # noqa
 
-        if bbox is None:
-            bbox = []
-        else:
-            try:
-                bbox = validate_bbox(bbox)
-            except ValueError as err:
-                msg = str(err)
-                return self.get_exception(
-                    HTTPStatus.BAD_REQUEST, headers, request.format,
-                    'InvalidParameterValue', msg)
+        except ValueError as err:
+            msg = str(err)
+            return self.get_exception(
+                400, headers, request.format, 'InvalidParameterValue', msg)
 
         LOGGER.debug('Processing datetime parameter')
         datetime_ = request.params.get('datetime')
@@ -1580,7 +1574,7 @@ class API:
         LOGGER.debug(f'resulttype: {resulttype}')
         LOGGER.debug(f'sortby: {sortby}')
         LOGGER.debug(f'bbox: {bbox}')
-        LOGGER.debug('bbox-crs: {}'.format(bbox_crs))
+        LOGGER.debug(f'bbox-crs: {bbox_crs}')
         LOGGER.debug(f'datetime: {datetime_}')
         LOGGER.debug(f'properties: {properties}')
         LOGGER.debug(f'select properties: {select_properties}')
@@ -1828,16 +1822,10 @@ class API:
             # Read the spatial filter parameters from the request
             bbox, bbox_crs = request.read_bbox_parameters("POST")  # noqa
 
-        if bbox is None:
-            bbox = []
-        else:
-            try:
-                bbox = validate_bbox(bbox)
-            except ValueError as err:
-                msg = str(err)
-                return self.get_exception(
-                    HTTPStatus.BAD_REQUEST, headers, request.format,
-                    'InvalidParameterValue', msg)
+        except ValueError as err:
+            msg = str(err)
+            return self.get_exception(
+                400, headers, request.format, 'InvalidParameterValue', msg)
 
         LOGGER.debug('Processing datetime parameter')
         datetime_ = request.params.get('datetime')
@@ -1955,8 +1943,7 @@ class API:
         LOGGER.debug(f'resulttype: {resulttype}')
         LOGGER.debug(f'sortby: {sortby}')
         LOGGER.debug(f'bbox: {bbox}')
-        LOGGER.debug('bbox-crs: {}'.format(bbox_crs))
-        LOGGER.debug('datetime: {}'.format(datetime_))
+        LOGGER.debug(f'bbox-crs: {bbox_crs}')
         LOGGER.debug(f'datetime: {datetime_}')
         LOGGER.debug(f'properties: {select_properties}')
         LOGGER.debug(f'skipGeometry: {skip_geometry}')
@@ -2358,16 +2345,10 @@ class API:
             # Read the spatial filter parameters from the request
             bbox, bbox_crs = request.read_bbox_parameters("GET")  # noqa
 
-        if bbox is None:
-            bbox = []
-        else:
-            try:
-                bbox = validate_bbox(bbox)
-            except ValueError as err:
-                msg = str(err)
-                return self.get_exception(
-                    HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
-                    'InvalidParameterValue', msg)
+        except ValueError as err:
+            msg = str(err)
+            return self.get_exception(
+                400, headers, request.format, 'InvalidParameterValue', msg)
 
         query_args['bbox'] = bbox
         if bbox_crs is not None:
