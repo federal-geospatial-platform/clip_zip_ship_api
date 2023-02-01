@@ -36,7 +36,7 @@
 Returns content from plugins and sets responses.
 """
 
-import asyncio
+import asyncio, yaml
 from collections import OrderedDict
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -59,6 +59,7 @@ from shapely.errors import WKTReadingError
 from shapely.wkt import loads as shapely_loads
 
 from pygeoapi import __version__, l10n
+from pygeoapi.openapi import get_oas
 from pygeoapi.formatter.base import FormatterSerializationError
 from pygeoapi.linked_data import (geojson2jsonld, jsonldify,
                                   jsonldify_collection)
@@ -722,6 +723,126 @@ class API:
         self.manager = load_plugin('process_manager', manager_def)
         LOGGER.info('Process manager plugin loaded')
 
+        # Now that basic configuration is read, call the load ressources.
+        # This call enables the api engine to load resources dynamically.
+        # That is, resources which could be coming from other sources than
+        # the yaml file itself. Indeed, the yaml file could be empty of
+        # resources and all read dynamically from somewhere else
+        # (e.g. a database).
+        # That way, it's a little easier to manage a dynamic ensemble of
+        # resoures, especially on pygeoapi distributed environments.
+        self.load_resources()
+
+    def load_resources(self):
+        """
+        Calls on_load_resources and reassigns the resources configuration.
+        """
+
+        # Call on_load_resources sending the current resources configuration.
+        self.config['resources'] = self.on_load_resources(
+            self.config['resources'])
+
+    def on_load_resources(self, resources):
+        """
+        Overridable function to load (or reload) the available resources
+        dynamically.
+        By default, this function simply returns the resources as-is. This is
+        the original behavior of the API; expecting resources to be
+        already configured correctly per the yaml config file.
+
+        :param resources: the resources as currently configured
+        (self.config['resources'])
+        :returns: the resources dictionary that's available in the API.
+        """
+
+        # By default, return the same resources object, unchanged.
+        return resources
+
+    def on_description_filter_spatially(self, collections, geom_wkt, geom_crs):
+        """
+        Overridable function to spatially filter the collections list based on
+        a geometry.
+        This function is called when the /collections or
+        /collections/<collection_id> end points are hit (as it's the same
+        Python handler method).
+        Example of usage: typically, when the /collections end point is hit,
+        all the collections are returned to the client. This overridable
+        method enables developers to perform additional processing before
+        returning the response to the client..
+        For instance, spatial filtering the collections according to a
+        geometry which would have been provided by the client performing
+        the request.
+        :returns: the collections available in the API.
+        """
+
+        # By default, return the same collections object, unchanged.
+        return collections
+
+    def on_build_collection_finalize(self, locale, collection_data_type,
+                                     input_coll, active_coll):
+        """
+        Overridable function to modify the collection information before
+        returning it to the client.
+        This function is called when the /collections or
+        /collections/<collection_id> end points are hit (as it's the same
+        Python handler method). Edit the "active_coll" object to alter the
+        output to the client for the given collection.
+        Example of usage: we might want to attach some metadata information,
+        fetched dynamically, for each collection information object.
+        """
+
+        # By default, do nothing
+        pass
+
+    def save_config_pygeoapi(self):
+        """
+        Saves the current configuration in the PYGEOAPI_CONFIG file.
+        """
+
+        # Stringify
+        ymalStringData = yaml.dump(self.config, indent=4,
+                                   allow_unicode=True,
+                                   default_flow_style=False,
+                                   sort_keys=False)
+
+        # Write to file
+        with open(os.environ.get('PYGEOAPI_CONFIG'), 'w',
+                  encoding='utf-8') as outfile:
+            outfile.write(ymalStringData)
+
+    def save_config_openapi(self):
+        """
+        Saves the current configuration in the PYGEOAPI_OPENAPI file.
+        This method does basically the same thing as:
+        pygeoapi openapi generate $PYGEOAPI_CONFIG --output-file
+        $PYGEOAPI_OPENAPI
+        """
+
+        # Also save the OpenAPI file
+        content = yaml.safe_dump(get_oas(self.config),
+                                 allow_unicode=True,
+                                 default_flow_style=False)
+
+        # Write to file
+        with open(os.environ.get('PYGEOAPI_OPENAPI'), 'w',
+                  encoding='utf-8') as outfile:
+            outfile.write(content)
+
+    def save_configs(self, save_openapi: bool):
+        """
+        Saves the current configuration in the PYGEOAPI_CONFIG file and,
+        optionally, when save_openapi is true, in the PYGEOAPI_OPENAPI file.
+        """
+
+        # Save the config
+        self.save_config_pygeoapi()
+
+        # If also updating the OpenAPI specs (which in turn is dynamically
+        # read by the openapi end point - thus effectively dynamically adapting
+        # the API swagger according to dynamic resources)
+        if save_openapi:
+            self.save_config_openapi()
+
     @gzip
     @pre_process
     @jsonldify
@@ -737,6 +858,8 @@ class API:
 
         if not request.is_valid():
             return self.get_format_exception(request)
+
+        self.save_configs(false)
 
         fcm = {
             'links': [],
@@ -903,8 +1026,44 @@ class API:
     @gzip
     @pre_process
     @jsonldify
+    def get_describe_collections(self, request: Union[APIRequest, Any],
+                                 dataset=None) -> Tuple[dict, int, str]:
+        """
+        Provide collection metadata
+
+        :param request: A request object
+        :param dataset: name of collection
+
+        :returns: tuple of headers, status code, content
+        """
+
+        # Redirect to the common describe_collections method
+        # specifying the GET method was used
+        return self.describe_collections(request, dataset, "GET")
+
+    @gzip
+    @pre_process
+    @jsonldify
+    def post_describe_collections(self, request: Union[APIRequest, Any],
+                                  dataset=None) -> Tuple[dict, int, str]:
+        """
+        Provide collection metadata
+
+        :param request: A request object
+        :param dataset: name of collection
+
+        :returns: tuple of headers, status code, content
+        """
+
+        # Redirect to the common describe_collections method
+        # specifying the POST method was used
+        return self.describe_collections(request, dataset, "POST")
+
+    @gzip
+    @pre_process
+    @jsonldify
     def describe_collections(self, request: Union[APIRequest, Any],
-                             dataset=None) -> Tuple[dict, int, str]:
+                             dataset=None, method=str) -> Tuple[dict, int, str]:  # noqa
         """
         Provide collection metadata
 
@@ -925,6 +1084,21 @@ class API:
 
         collections = filter_dict_by_key_value(self.config['resources'],
                                                'type', 'collection')
+
+        bbox = None
+        bboxcrs = None
+        try:
+            # Read the spatial filter parameters from the request
+            bbox, bbox_crs = request.read_bbox_parameters(method)  # noqa
+
+        except ValueError as err:
+            msg = str(err)
+            return self.get_exception(
+                HTTPStatus.BAD_REQUEST, headers, request.format, 'InvalidParameterValue', msg)
+
+        # Filter by bbox
+        collections = self.on_description_filter_spatially(collections, bbox, bbox_crs or 4326)
+
 
         if all([dataset is not None, dataset not in collections.keys()]):
             msg = 'Collection not found'
@@ -1029,9 +1203,9 @@ class API:
                 'href': f'{self.get_collections_url()}/{k}?f={F_HTML}'
             })
 
+            collection['itemType'] = collection_data_type
             if collection_data_type in ['feature', 'record', 'tile']:
                 # TODO: translate
-                collection['itemType'] = collection_data_type
                 LOGGER.debug('Adding feature/record based links')
                 collection['links'].append({
                     'type': FORMAT_TYPES[F_JSON],
@@ -1214,6 +1388,11 @@ class API:
                         request.format, 'NoApplicableCode', msg)
                 except ProviderTypeError:
                     pass
+
+            # Finalize building the collection information
+            self.on_build_collection_finalize(request.locale,
+                                              collection_data_type, v,
+                                              collection)
 
             if dataset is not None and k == dataset:
                 fcm = collection
@@ -1400,7 +1579,7 @@ class API:
 
         LOGGER.debug('Processing offset parameter')
         try:
-            offset = int(request.params.get('offset'))
+            offset = int(request.params.get('offset')) if request.params.get('offset') else 0
             if offset < 0:
                 msg = 'offset value should be positive or zero'
                 return self.get_exception(
