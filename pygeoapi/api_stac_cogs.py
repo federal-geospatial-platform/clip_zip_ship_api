@@ -13,7 +13,7 @@ def flush_rasterio(conn):
 
         # Query in the database
         query = sql.SQL(str_query).format(
-            table=sql.Identifier("czs", "czs_collection"))
+            table=sql.Identifier(conn.info.dbname, "czs_collection"))
 
         # Execute cursor
         cur.execute(query, ('coverage', 'rasterio'))
