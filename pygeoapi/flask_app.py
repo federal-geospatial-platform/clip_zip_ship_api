@@ -228,6 +228,9 @@ def collection_items(collection_id, item_id=None):
                 else:
                     return get_response(
                         api_.post_collection_items(request, collection_id))
+            else:
+                return get_response(
+                        api_.post_collection_items(request, collection_id))
 
     elif request.method == 'DELETE':
         return get_response(

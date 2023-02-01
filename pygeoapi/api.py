@@ -1853,7 +1853,6 @@ class API:
                                          'collections/items/index.html',
                                          content, request.locale)
             return headers, 200, content
-
         elif request.format == 'csv':  # render
             formatter = load_plugin('formatter',
                                     {'name': 'CSV', 'geom': True})
@@ -1978,7 +1977,6 @@ class API:
             msg = str(err)
             return self.get_exception(
                 400, headers, request.format, 'InvalidParameterValue', msg)
-
 
         LOGGER.debug('Processing datetime parameter')
         datetime_ = request.params.get('datetime')
