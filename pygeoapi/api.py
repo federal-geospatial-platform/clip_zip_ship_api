@@ -859,8 +859,6 @@ class API:
         if not request.is_valid():
             return self.get_format_exception(request)
 
-        self.save_configs(false)
-
         fcm = {
             'links': [],
             'title': l10n.translate(
