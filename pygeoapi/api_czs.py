@@ -38,6 +38,7 @@ class API_CZS(API):
         """
 
         # print("on_load_resources")
+        #return resources   # Uncomment this to run on resources from config file (not load from db)
 
         # Open the connection
         with open_conn(self.config["settings"]["database"]) as conn:
