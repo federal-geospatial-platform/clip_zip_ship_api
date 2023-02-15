@@ -1,6 +1,7 @@
 import sys, os, logging, json, requests
 from dateutil.parser import parse
 from urllib.parse import urlparse
+from http import HTTPStatus
 from typing import Any, Tuple, Union
 from configparser import ConfigParser
 import json, ast, yaml, psycopg2
@@ -90,7 +91,7 @@ class API_CZS(API):
         """
 
         # print("on_description_filter_spatially: filtering?=" + ('true' if geom_wkt else 'false'))
-        # print("Count before: " + str(len(collections)))
+        print("Count before: " + str(len(collections)))
 
         # If filtering spatially using a wkt
         if geom_wkt:
@@ -109,7 +110,7 @@ class API_CZS(API):
                 collections = collections_filtered
 
         # Return the filtered collections list
-        # print("Count after: " + str(len(collections)))
+        print("Count after: " + str(len(collections)))
         return collections
 
 
@@ -149,17 +150,6 @@ class API_CZS(API):
                 active_coll['parent'] = input_coll['parent']
 
 
-        #if len(input_coll["providers"]) > 0 and 'crs' in input_coll["providers"][0]:
-        #    active_coll['crs'] = input_coll["providers"][0]["crs"]
-
-        # Add the providers information to the output, but remove the data information for the feature collections
-        #if 'providers' in input_coll:
-        #    active_coll['providers'] = input_coll['providers']
-        #    for p in active_coll['providers']:
-        #        if 'type' in p and p['type'] == 'feature' and 'data' in p:
-                    #del p['data']
-
-
     @pre_process
     @jsonldify
     def reload_resources(self, request: Union[APIRequest, Any]) -> Tuple[dict, int, str]:
@@ -175,7 +165,7 @@ class API_CZS(API):
         # Reinitialize the configuration
         self.load_resources()
 
-        return headers, 200, to_json({"reloaded": True}, self.pretty_print)
+        return headers, HTTPStatus.OK, to_json({"reloaded": True}, self.pretty_print)
 
 
     @pre_process
@@ -222,7 +212,7 @@ class API_CZS(API):
             # Done
             conn.commit()
 
-        return headers, 200, to_json({"reloaded": True}, self.pretty_print)
+        return headers, HTTPStatus.OK, to_json({"reloaded": True}, self.pretty_print)
 
 
 def open_conn(database):
