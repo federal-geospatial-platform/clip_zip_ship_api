@@ -1559,7 +1559,7 @@ class API:
         headers = request.get_response_headers(SYSTEM_LOCALE)
 
         properties = []
-        reserved_fieldnames = ['f', 'lang', 'bbox', 'bbox-crs',
+        reserved_fieldnames = ['f', 'lang', 'bbox', 'bbox-crs', 'geom', 'geom-crs',
                                'limit', 'offset',
                                'resulttype', 'datetime', 'sortby',
                                'properties', 'skipGeometry', 'q',
@@ -1613,7 +1613,7 @@ class API:
 
         resulttype = request.params.get('resulttype') or 'results'
 
-        LOGGER.debug('Processing bbox and bbox-crs parameters')
+        LOGGER.debug('Processing spatial filter parameters')
 
         bbox = None
         bbox_crs = None
@@ -1992,7 +1992,7 @@ class API:
 
         resulttype = request.params.get('resulttype') or 'results'
 
-        LOGGER.debug('Processing bbox and bbox-crs parameters')
+        LOGGER.debug('Processing spatial filter parameters')
 
         bbox = None
         bbox_crs = None
@@ -2123,6 +2123,8 @@ class API:
         LOGGER.debug(f'sortby: {sortby}')
         LOGGER.debug(f'bbox: {bbox}')
         LOGGER.debug(f'bbox-crs: {bbox_crs}')
+        LOGGER.debug(f'geom: {geom}')
+        LOGGER.debug(f'geom-crs: {geom_crs}')
         LOGGER.debug(f'datetime: {datetime_}')
         LOGGER.debug(f'properties: {select_properties}')
         LOGGER.debug(f'skipGeometry: {skip_geometry}')
@@ -2185,7 +2187,7 @@ class API:
         try:
             content = p.query(offset=offset, limit=limit,
                               resulttype=resulttype, bbox=bbox,
-                              bbox_crs=bbox_crs,
+                              bbox_crs=bbox_crs, geom_wkt=geom, geom_crs=geom_crs,
                               datetime_=datetime_, properties=properties,
                               sortby=sortby,
                               select_properties=select_properties,
@@ -2516,7 +2518,7 @@ class API:
                 HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
                 'NoApplicableCode', msg)
 
-        LOGGER.debug('Processing bbox and bbox-crs parameters')
+        LOGGER.debug('Processing spatial filter parameters')
 
         bbox = None
         bbox_crs = None

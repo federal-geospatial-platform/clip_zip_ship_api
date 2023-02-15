@@ -57,7 +57,6 @@ from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is nee
 from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_SetSRID, ST_PolygonFromText
 from geoalchemy2.shape import to_shape
 from pygeofilter.backends.sqlalchemy.evaluate import to_filter
-
 import shapely
 
 from pygeoapi.provider.base import BaseProvider, \
