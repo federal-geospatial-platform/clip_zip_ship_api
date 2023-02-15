@@ -655,7 +655,7 @@ class APIRequest:
         """
         Reads a bbox and bbox-crs filters from the service end point.
         This function reads spatial filter information in either GET or POST
-        http methods.
+        http methods. By defaultk, 4326 is returned as the bbox-crs.
         :param method: indicates if the parameter value should be read from GET
         or POST fashion. Possible values are "GET" or "POST".
         :returns: an array of spatial filters as provided in the service
@@ -669,9 +669,51 @@ class APIRequest:
         bbox = self.read_bbox(method)
 
         # Read the bbox crs if any
-        bbox_crs = self.read_param(method, 'bbox-crs')
+        bbox_crs = self.read_param(method, 'bbox-crs') or 4326
 
         return bbox, bbox_crs
+
+
+    def read_spatial_filter(self, method: str):
+        """
+        Reads a geometry or bbox spatial filter from the service end point.
+        When a bbox is specified and no geometry is specified, this function
+        also converts the bbox (and its crs) to a geometry (and its crs) for
+        convenience. By defaultk, 4326 is returned as the geom-crs and bbox-crs.
+        This function reads spatial filter information in either GET or POST
+         http methods.
+        :param method: indicates if the parameter value should be read from GET
+         or POST fashion. Possible values are "GET" or "POST".
+        :returns: an array of spatial filters as provided in the service
+         request (geom, geom-crs, bbox, bbox-crs).
+        """
+
+        # Read the geometry if any
+        geom = self.read_param(method, 'geom')
+
+        # Read the geometry crs if any
+        geom_crs = self.read_param(method, 'geom-crs') or 4326
+
+        # If no geom_wkt
+        bbox = None
+        bbox_crs = None
+        if not geom:
+            # Read the bbox if any
+            bbox, bbox_crs = self.read_bbox_parameters(method)
+
+            # If a bbox is set
+            if bbox:
+                # Transform bbox to polygon wkt
+                geom = """POLYGON(({x_min} {y_min}, {x_min} {y_max},
+                                   {x_max} {y_max}, {x_max} {y_min},
+                                   {x_min} {y_min}))""".format(
+                    x_min=bbox[0],
+                    y_min=bbox[1],
+                    x_max=bbox[2],
+                    y_max=bbox[3])
+                geom_crs = bbox_crs
+
+        return geom, geom_crs, bbox, bbox_crs
 
 
 class API:
@@ -1057,10 +1099,7 @@ class API:
         # specifying the POST method was used
         return self.describe_collections(request, dataset, "POST")
 
-    @gzip
-    @pre_process
-    @jsonldify
-    def describe_collections(self, request: Union[APIRequest, Any],
+    def describe_collections(self, request: APIRequest,
                              dataset=None, method=str) -> Tuple[dict, int, str]:  # noqa
         """
         Provide collection metadata
@@ -1083,20 +1122,22 @@ class API:
         collections = filter_dict_by_key_value(self.config['resources'],
                                                'type', 'collection')
 
+        geom = None
+        geom_crs = None
         bbox = None
-        bboxcrs = None
+        bbox_crs = None
         try:
             # Read the spatial filter parameters from the request
-            bbox, bbox_crs = request.read_bbox_parameters(method)  # noqa
+            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter(method)  # noqa
 
         except ValueError as err:
             msg = str(err)
             return self.get_exception(
-                HTTPStatus.BAD_REQUEST, headers, request.format, 'InvalidParameterValue', msg)
+                HTTPStatus.BAD_REQUEST, headers, request.format,
+                'InvalidParameterValue', msg)
 
         # Filter by bbox
-        collections = self.on_description_filter_spatially(collections, bbox, bbox_crs or 4326)
-
+        collections = self.on_description_filter_spatially(collections, geom, geom_crs)
 
         if all([dataset is not None, dataset not in collections.keys()]):
             msg = 'Collection not found'
@@ -1615,11 +1656,13 @@ class API:
 
         LOGGER.debug('Processing bbox and bbox-crs parameters')
 
+        geom = None
+        geom_crs = None
         bbox = None
         bbox_crs = None
         try:
             # Read the spatial filter parameters from the request
-            bbox, bbox_crs = request.read_bbox_parameters("GET")  # noqa
+            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter("GET")  # noqa
 
         except ValueError as err:
             msg = str(err)
@@ -1753,6 +1796,8 @@ class API:
         LOGGER.debug(f'sortby: {sortby}')
         LOGGER.debug(f'bbox: {bbox}')
         LOGGER.debug(f'bbox-crs: {bbox_crs}')
+        LOGGER.debug(f'geom: {geom}')
+        LOGGER.debug(f'geom-crs: {geom_crs}')
         LOGGER.debug(f'datetime: {datetime_}')
         LOGGER.debug(f'properties: {properties}')
         LOGGER.debug(f'select properties: {select_properties}')
@@ -1765,7 +1810,7 @@ class API:
         try:
             content = p.query(offset=offset, limit=limit,
                               resulttype=resulttype, bbox=bbox,
-                              bbox_crs=bbox_crs,
+                              bbox_crs=bbox_crs, geom_wkt=geom, geom_crs=geom_crs,
                               datetime_=datetime_, properties=properties,
                               sortby=sortby,
                               select_properties=select_properties,
@@ -1938,8 +1983,9 @@ class API:
         headers = request.get_response_headers(SYSTEM_LOCALE)
 
         properties = []
-        reserved_fieldnames = ['bbox', 'f', 'limit', 'offset',
+        reserved_fieldnames = ['lang', 'f', 'limit', 'offset',
                                'resulttype', 'datetime', 'sortby',
+                               'bbox', 'bbox-crs', 'geom', 'geom-crs',
                                'properties', 'skipGeometry', 'q',
                                'filter-lang']
 
@@ -1994,11 +2040,13 @@ class API:
 
         LOGGER.debug('Processing bbox and bbox-crs parameters')
 
+        geom = None
+        geom_crs = None
         bbox = None
         bbox_crs = None
         try:
             # Read the spatial filter parameters from the request
-            bbox, bbox_crs = request.read_bbox_parameters("POST")  # noqa
+            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter("POST")  # noqa
 
         except ValueError as err:
             msg = str(err)
@@ -2108,13 +2156,14 @@ class API:
         else:
             skip_geometry = False
 
-        LOGGER.debug('Processing filter-lang parameter')
+        # @TODO: CQL STUFF Not implemented yet in POST, so uncommented for now
+        # LOGGER.debug('Processing filter-lang parameter')
         filter_lang = request.params.get('filter-lang')
-        if filter_lang != 'cql-json':  # @TODO add check from the configuration
-            msg = 'Invalid filter language'
-            return self.get_exception(
-                HTTPStatus.BAD_REQUEST, headers, request.format,
-                'InvalidParameterValue', msg)
+        # if filter_lang != 'cql-json':  # @TODO add check from the configuration
+        #     msg = 'Invalid filter language'
+        #     return self.get_exception(
+        #         HTTPStatus.BAD_REQUEST, headers, request.format,
+        #         'InvalidParameterValue', msg)
 
         LOGGER.debug('Querying provider')
         LOGGER.debug(f'offset: {offset}')
@@ -2131,14 +2180,15 @@ class API:
 
         LOGGER.debug('Processing headers')
 
-        LOGGER.debug('Processing request content-type header')
-        if (request_headers.get(
-            'Content-Type') or request_headers.get(
-                'content-type')) != 'application/query-cql-json':
-            msg = ('Invalid body content-type')
-            return self.get_exception(
-                HTTPStatus.BAD_REQUEST, headers, request.format,
-                'InvalidHeaderValue', msg)
+        # @TODO: CQL STUFF Not implemented yet in POST, so uncommented for now
+        # LOGGER.debug('Processing request content-type header')
+        # if (request_headers.get(
+        #     'Content-Type') or request_headers.get(
+        #         'content-type')) != 'application/query-cql-json':
+        #     msg = ('Invalid body content-type')
+        #     return self.get_exception(
+        #         HTTPStatus.BAD_REQUEST, headers, request.format,
+        #         'InvalidHeaderValue', msg)
 
         LOGGER.debug('Processing body')
 
@@ -2518,16 +2568,18 @@ class API:
 
         LOGGER.debug('Processing bbox and bbox-crs parameters')
 
+        geom = None
+        geom_crs = None
         bbox = None
         bbox_crs = None
         try:
             # Read the spatial filter parameters from the request
-            bbox, bbox_crs = request.read_bbox_parameters("GET")  # noqa
+            geom, geom_crs, bbox, bbox_crs = request.read_spatial_filter("GET")  # noqa
 
         except ValueError as err:
             msg = str(err)
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
+                HTTPStatus.BAD_REQUEST, headers, format_,
                 'InvalidParameterValue', msg)
 
         query_args['bbox'] = bbox

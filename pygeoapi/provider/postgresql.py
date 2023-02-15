@@ -54,10 +54,12 @@ from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session, load_only
 from sqlalchemy.sql.expression import and_
 from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
-from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID
+from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_SetSRID, ST_PolygonFromText
+from geoalchemy2.shape import to_shape
 from pygeofilter.backends.sqlalchemy.evaluate import to_filter
 
 import shapely
+
 from pygeoapi.provider.base import BaseProvider, \
     ProviderConnectionError, ProviderQueryError, ProviderItemNotFoundError
 
@@ -109,7 +111,9 @@ class PostgreSQLProvider(BaseProvider):
         LOGGER.debug('SRID: {}'.format(self.srid))
 
     def query(self, offset=0, limit=10, resulttype='results',
-              bbox=[], bbox_crs=None, datetime_=None, properties=[], sortby=[],
+              bbox=None, bbox_crs=None, geom_wkt=None,
+              geom_crs=None, data_crs=None,
+              datetime_=None, properties=[], sortby=[],
               select_properties=[], skip_geometry=False, q=None,
               filterq=None, **kwargs):
         """
@@ -120,8 +124,17 @@ class PostgreSQLProvider(BaseProvider):
         :param offset: starting record to return (default 0)
         :param limit: number of records to return (default 10)
         :param resulttype: return results or hit limit (default results)
-        :param bbox: bounding box [minx,miny,maxx,maxy]
-        :param bbox_crs: bounding box crs (default unspecified)
+        :param bbox: bounding box [minx,miny,maxx,maxy] to query on
+        (when specified)
+        :param bbox_crs: the spatial projection of the bounding box
+        (when specified)
+        :param geom_wkt: the geom wkt to query on
+        (when specified)
+        :param geom_crs: the spatial projection of the geom wkt
+        (when specified)
+        :param data_crs: the spatial projection of the data being queried, as
+        read from the provider configuration
+        (when specified).
         :param datetime_: temporal (datestamp or extent)
         :param properties: list of tuples (name, value)
         :param sortby: list of dicts (property, order)
@@ -136,7 +149,7 @@ class PostgreSQLProvider(BaseProvider):
         LOGGER.debug('Preparing filters')
         property_filters = self._get_property_filters(properties)
         cql_filters = self._get_cql_filters(filterq)
-        bbox_filter = self._get_bbox_filter(bbox, bbox_crs)
+        bbox_filter = self._get_spatial_filter(bbox, bbox_crs, geom_wkt, geom_crs)
         order_by_clauses = self._get_order_by_clauses(sortby, self.table_model)
         selected_properties = self._select_properties_clause(select_properties,
                                                              skip_geometry)
@@ -395,27 +408,50 @@ class PostgreSQLProvider(BaseProvider):
 
         return property_filters
 
-    def _get_bbox_filter(self, bbox, bbox_crs):
-        if not bbox:
-            return True  # Let everything through
+    def _get_spatial_filter(self, bbox, bbox_crs, geom_wkt, geom_crs):
 
-        # If a bbox_crs is specified
-        if bbox_crs:
-            # Append the srid to the bbox coordinates
-            bbox.append(int(bbox_crs))
-            # Make the bbox envelope
-            envelope = ST_MakeEnvelope(*bbox)
-            # Project the bbox's to the SRID of the table
-            envelope = ST_Transform(envelope, self.srid)
+        # If a geom is specified
+        query_shape = None
+        if geom_wkt:
+            # If a geom_crs is specified
+            if geom_crs:
+
+                # Make the polygon from wkt
+                query_shape = ST_PolygonFromText(geom_wkt)
+
+                # Set the SRID for it
+                query_shape = ST_SetSRID(query_shape, geom_crs)
+
+                # Project the geometry to the SRID of the table
+                query_shape = ST_Transform(query_shape, self.srid)
+
+            else:
+                print ("HERE 2")
+
+                # Make the polygon from wkt
+                query_shape = ST_PolygonFromText(geom_wkt)
+
+        elif bbox:
+            # If a bbox_crs is specified
+            if bbox_crs:
+                # Append the srid to the bbox coordinates
+                bbox.append(int(bbox_crs))
+                
+                # Make the bbox envelope
+                query_shape = ST_MakeEnvelope(*bbox)
+
+                # Project the bbox's to the SRID of the table
+                query_shape = ST_Transform(query_shape, self.srid)
+
+            else:
+                # Make the bbox envelope assuming the same crs as the data
+                query_shape = ST_MakeEnvelope(*bbox)
 
         else:
-            # Make the bbox envelope assuming the same crs as the data
-            envelope = ST_MakeEnvelope(*bbox)
+            return True  # Let everything through
 
         geom_column = getattr(self.table_model, self.geom)
-        bbox_filter = geom_column.intersects(envelope)
-
-        return bbox_filter
+        return geom_column.intersects(query_shape)
 
     def _select_properties_clause(self, select_properties, skip_geometry):
         # List the column names that we want
