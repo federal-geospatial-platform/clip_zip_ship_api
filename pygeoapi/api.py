@@ -2533,9 +2533,12 @@ class API:
                 'InvalidParameterValue', msg)
 
         query_args['bbox'] = bbox
+        query_args['geom'] = geom
 
         if bbox_crs is not None:
             query_args['bbox_crs'] = bbox_crs
+        if geom_crs is not None:
+            query_args['geom_crs'] = geom_crs
 
         LOGGER.debug('Processing datetime parameter')
 

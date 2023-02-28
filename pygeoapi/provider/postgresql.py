@@ -54,7 +54,7 @@ from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session, load_only
 from sqlalchemy.sql.expression import and_
 from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
-from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_SetSRID, ST_PolygonFromText
+from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_PolygonFromText
 from geoalchemy2.shape import to_shape
 from pygeofilter.backends.sqlalchemy.evaluate import to_filter
 import shapely
@@ -148,7 +148,7 @@ class PostgreSQLProvider(BaseProvider):
         LOGGER.debug('Preparing filters')
         property_filters = self._get_property_filters(properties)
         cql_filters = self._get_cql_filters(filterq)
-        bbox_filter = self._get_spatial_filter(bbox, bbox_crs, geom_wkt, geom_crs)
+        spat_filter = self._get_spatial_filter(bbox, bbox_crs, geom_wkt, geom_crs)
         order_by_clauses = self._get_order_by_clauses(sortby, self.table_model)
         selected_properties = self._select_properties_clause(select_properties,
                                                              skip_geometry)
@@ -159,7 +159,7 @@ class PostgreSQLProvider(BaseProvider):
             results = (session.query(self.table_model)
                        .filter(property_filters)
                        .filter(cql_filters)
-                       .filter(bbox_filter)
+                       .filter(spat_filter)
                        .order_by(*order_by_clauses)
                        .options(selected_properties)
                        .offset(offset))
@@ -414,12 +414,8 @@ class PostgreSQLProvider(BaseProvider):
         if geom_wkt:
             # If a geom_crs is specified
             if geom_crs:
-
                 # Make the polygon from wkt
-                query_shape = ST_PolygonFromText(geom_wkt)
-
-                # Set the SRID for it
-                query_shape = ST_SetSRID(query_shape, geom_crs)
+                query_shape = ST_PolygonFromText(geom_wkt, geom_crs)
 
                 # Project the geometry to the SRID of the table
                 query_shape = ST_Transform(query_shape, self.srid)
@@ -434,7 +430,7 @@ class PostgreSQLProvider(BaseProvider):
                 # Append the srid to the bbox coordinates
                 bbox.append(int(bbox_crs))
 
-                # Make the bbox envelope
+                # Make the bbox envelope with the provided crs
                 query_shape = ST_MakeEnvelope(*bbox)
 
                 # Project the bbox's to the SRID of the table
@@ -448,7 +444,7 @@ class PostgreSQLProvider(BaseProvider):
             return True  # Let everything through
 
         geom_column = getattr(self.table_model, self.geom)
-        return geom_column.intersects(query_shape)
+        return geom_column.ST_Intersects(query_shape)
 
     def _select_properties_clause(self, select_properties, skip_geometry):
         # List the column names that we want
