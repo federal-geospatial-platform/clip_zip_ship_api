@@ -45,6 +45,7 @@ class BaseProcessor:
 
         :returns: pygeoapi.processor.base.BaseProvider
         """
+        self.processor_def = processor_def
         self.name = processor_def['name']
         self.metadata = process_metadata
 
