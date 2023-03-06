@@ -155,7 +155,7 @@ class ExtractProcessor(BaseProcessor):
 
             # If the collection has a provider of type feature
             if c_type == "feature":
-                # Query
+                # Query using the provider logic
                 res = p.query(offset=0, limit=10,
                               resulttype='results', bbox=None,
                               bbox_crs=None, geom_wkt=geom, geom_crs=geom_crs,
@@ -166,7 +166,7 @@ class ExtractProcessor(BaseProcessor):
                               q=None, language='en', filterq=None)
 
             elif c_type == "coverage":
-                # Query
+                # Query using the provider logic
                 query_args = {
                     'geom': geom,
                     'geom_crs': geom_crs
@@ -183,8 +183,11 @@ class ExtractProcessor(BaseProcessor):
             # Save to a JSON file
             files.append(ExtractProcessor._save_file(c + ".json", res))
 
+        # Destination zip file path and name
+        dest_zip = './Extraction.zip'
+
         # Save all files to a zip file
-        zip_file = ExtractProcessor._zip_file(files)
+        zip_file = ExtractProcessor._zip_file(files, dest_zip)
 
         # Put the zip file in S3
         ExtractProcessor._connect_s3_send_file(self.processor_def['s3_iam_role'], self.processor_def['s3_bucket_name'], zip_file)
@@ -202,8 +205,8 @@ class ExtractProcessor(BaseProcessor):
 
 
     @staticmethod
-    def _zip_file(file_names: list):
-        with zipfile.ZipFile('./Extraction.zip', 'w', zipfile.ZIP_DEFLATED) as zipf:
+    def _zip_file(file_names: list, zip_file_name: str):
+        with zipfile.ZipFile(zip_file_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
             for f in file_names:
                 zipf.write(f'./{f}')
             zipf.close()
