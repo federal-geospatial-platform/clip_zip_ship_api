@@ -68,12 +68,19 @@ class API_CZS(API):
                         the_resources[d["collection_name"]] = deepcopy(providerDict)
 
                 else:
-                    print("Already loaded: " + d["collection_name"])
-                    #print(d)
-                    pass # Already loaded this resource key
+                    print("Collection already loaded: " + d["collection_name"])
+                    #pass # Already loaded this resource key
 
-            # Done
-            conn.commit()
+        # Add our custom process dynamically
+        the_resources['extract'] = {
+            'type': 'process',
+            'processor': {
+                'name': 'pygeoapi.process.extract.ExtractProcessor',
+                'collections': deepcopy(the_resources),
+                's3_iam_role': "arn:aws:iam::862867296240:role/qgis-ecs-ddr-access-staging",
+                's3_bucket_name': "pygeoapi"
+            }
+        }
 
         # Return the resources
         return the_resources

@@ -27,17 +27,15 @@
 #
 # =================================================================
 
-import os, logging
-from psycopg2 import sql
-from xml.etree import cElementTree as ET
+import os, logging, json, zipfile, boto3, botocore
 
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
+
 from pygeoapi.util import (get_provider_by_type, to_json)
 from pygeoapi.plugin import load_plugin
 
 
 LOGGER = logging.getLogger(__name__)
-
 
 #: Process metadata and description
 PROCESS_METADATA = {
@@ -48,10 +46,10 @@ PROCESS_METADATA = {
         'fr': 'Extrait les données'
     },
     'description': {
-        'en': 'This process takes a list of collections, a geometry wkt and crs as inputs and proceeds to extract the records of all collections.',
-        'fr': 'Ce processus prend une liste de collections, une géométrie en format wkt avec un crs et extrait les enregistrements de toutes les collections.',
+        'en': 'This process takes a list of collections and a geometry wkt as input, extracts the records, saves them as geojson in a zip file, stores the zip file to an S3 Bucket, and returns the URL to download the file.',
+        'fr': 'Ce processus prend une liste de collections, une géométrie en format wkt, extrait les enregistrements qui intersectent la géométrie, sauvegarde les informations en geojson, sauvegarde le tout dans un zip file dans un Bucket S3, et retourne le chemin URL pour télécharger le fichier.',
     },
-    'keywords': ['extract'],
+    'keywords': ['extract', 'clip zip ship'],
     'links': [{
         'type': 'text/html',
         'rel': 'about',
@@ -107,8 +105,9 @@ PROCESS_METADATA = {
     'example': {
         'inputs': {
             "collections": [
-                "coll_name_1",
-                "coll_name_2"
+                "cdem_mpi__major_projects_inventory_point",
+                "cdem_mpi__major_projects_inventory_line",
+                "cdem_mpi__cdem"
             ],
             "geom": "POLYGON((-72.3061 45.3656, -72.3061 45.9375, -71.7477 45.9375, -71.7477 45.3656, -72.3061 45.3656))",
             "geom_crs": 4326
@@ -118,12 +117,9 @@ PROCESS_METADATA = {
 
 
 class ExtractProcessor(BaseProcessor):
-    """
-    Extract Processor used to query multiple collections, of various providers, at the same time.
-    In this iteration, only collection types feature and coverage are supported, but the logic could be scaled up.
-    """
+    """Extract Processor"""
 
-    def __init__(self, processor_def, process_metadata):
+    def __init__(self, processor_def):
         """
         Initialize object
 
@@ -132,16 +128,9 @@ class ExtractProcessor(BaseProcessor):
         :returns: pygeoapi.process.extract.ExtractProcessor
         """
 
-        # If none set, use default
-        if not process_metadata:
-            process_metadata = PROCESS_METADATA
-
-        super().__init__(processor_def, process_metadata)
+        super().__init__(processor_def, PROCESS_METADATA)
 
     def execute(self, data):
-        """
-        Entry point of the execution process.
-        """
 
         # Read the input params
         geom = data['geom']
@@ -149,78 +138,113 @@ class ExtractProcessor(BaseProcessor):
         colls = data['collections']
 
         # For each collection to query
-        query_res = {}
+        content = {}
+        files = []
         for c in colls:
-            # Call on query with it which will query the collection based on its provider
-            query_res[c] = self.on_query(c, geom, geom_crs)
+            # Read the configuration for it
+            c_conf = self.processor_def['collections'][c]
 
-        # Finalize the results
-        self.on_query_finalize(data, query_res)
+            # Get the collection type by its providers
+            c_type = ExtractProcessor._get_collection_type_from_providers(c_conf['providers'])
 
-        # Return result
-        return self.on_query_results(query_res)
+            # Get the provider by type
+            provider_def = get_provider_by_type(c_conf['providers'], c_type)
 
-    def on_query(self, coll_name: str, geom_wkt: str, geom_crs: int):
-        """
-        Overridable function to query a particular collection given its name.
-        One trick here is that the collections in processor_def must be a deepcopy of the
-        ressources from the API configuration.
-        """
+            # Load the plugin
+            p = load_plugin('provider', provider_def)
 
-        # Read the configuration for it
-        c_conf = self.processor_def['collections'][coll_name]
+            # If the collection has a provider of type feature
+            if c_type == "feature":
+                # Query
+                res = p.query(offset=0, limit=10,
+                              resulttype='results', bbox=None,
+                              bbox_crs=None, geom_wkt=geom, geom_crs=geom_crs,
+                              datetime_=None, properties=[],
+                              sortby=[],
+                              select_properties=[],
+                              skip_geometry=False,
+                              q=None, language='en', filterq=None)
 
-        # Get the collection type by its providers
-        c_type = ExtractProcessor._get_collection_type_from_providers(c_conf['providers'])
+            elif c_type == "coverage":
+                # Query
+                query_args = {
+                    'geom': geom,
+                    'geom_crs': geom_crs
+                }
+                res = p.query(**query_args)
 
-        # Get the provider by type
-        provider_def = get_provider_by_type(c_conf['providers'], c_type)
+            else:
+                res = None
+                pass # Skip, unsupported
 
-        # Load the plugin
-        p = load_plugin('provider', provider_def)
+            # Store the result in the response content
+            content[c] = res
 
-        # If the collection has a provider of type feature
-        if c_type == "feature":
-            # Query using the provider logic and clip = True!
-            res = p.query(offset=0, limit=10,
-                          resulttype='results', bbox=None,
-                          bbox_crs=None, geom_wkt=geom_wkt, geom_crs=geom_crs,
-                          datetime_=None, properties=[],
-                          sortby=[],
-                          select_properties=[],
-                          skip_geometry=False,
-                          q=None, language='en', filterq=None,
-                          clip=True)
+            # Save to a JSON file
+            files.append(ExtractProcessor._save_file(c + ".json", res))
 
-        elif c_type == "coverage":
-            # Query using the provider logic
-            query_args = {
-                'geom': geom_wkt,
-                'geom_crs': geom_crs
-            }
-            res = p.query(**query_args)
+        # Save all files to a zip file
+        zip_file = ExtractProcessor._zip_file(files)
 
-        else:
-            res = None
-            pass # Skip, unsupported
+        # Put the zip file in S3
+        ExtractProcessor._connect_s3_send_file(self.processor_def['s3_iam_role'], self.processor_def['s3_bucket_name'], zip_file)
 
-        # Return the query result
-        return res
+        mimetype = 'application/json'
 
-    def on_query_finalize(self, data: dict, query_res: dict):
-        """
-        Override this method to do further things with the queried results
-        """
+        return mimetype, content
 
-        pass
 
-    def on_query_results(self, query_res: dict):
-        """
-        Override this method to return something else than the default json of the results
-        """
+    @staticmethod
+    def _save_file(file_name: str, content: dict):
+        with open(f'./{file_name}', 'w') as f:
+            json.dump(content, f)
+        return file_name
 
-        # Return the query results
-        return 'application/json', query_res
+
+    @staticmethod
+    def _zip_file(file_names: list):
+        with zipfile.ZipFile('./Extraction.zip', 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for f in file_names:
+                zipf.write(f'./{f}')
+            zipf.close()
+            return zipf
+
+
+    @staticmethod
+    def _connect_s3_send_file(iam_role: str, bucket_name: str, file_path: str):
+        try:
+            # Create an STS client object that represents a live connection to the
+            # STS service
+            sts_client = boto3.client('sts')
+
+            # Call the assume_role method of the STSConnection object and pass the role
+            # ARN and a role session name.
+            assumed_role_object = sts_client.assume_role(
+                RoleArn=iam_role,
+                RoleSessionName="AssumeRoleECS"
+            )
+
+            # From the response that contains the assumed role, get the temporary
+            # credentials that can be used to make subsequent API calls
+            credentials = assumed_role_object['Credentials']
+
+            # Use the temporary credentials that AssumeRole returns to make a
+            # connection to Amazon S3
+            s3_resource = boto3.resource(
+                's3',
+                aws_access_key_id=credentials['AccessKeyId'],
+                aws_secret_access_key=credentials['SecretAccessKey'],
+                aws_session_token= credentials['SessionToken']
+            )
+
+            # Send the file to the bucket
+            s3_resource.Bucket(bucket_name).upload_file('./Extraction.zip', os.path.basename('Extraction.zip'))
+
+        except botocore.exceptions.ClientError as e:
+            print("ERROR UPLOADING FILE TO S3")
+            print(e)
+            raise
+
 
     @staticmethod
     def _get_collection_type_from_providers(providers: list):
@@ -231,6 +255,7 @@ class ExtractProcessor(BaseProcessor):
             elif p['type'] == "coverage":
                 return "coverage"
         return None
+
 
     def __repr__(self):
         return f'<ExtractProcessor> {self.name}'
