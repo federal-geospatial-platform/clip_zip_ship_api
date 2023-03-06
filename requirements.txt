@@ -1,8 +1,8 @@
 Babel
-click
+boto3
+click>7,<=8
 Flask
-importlib_metadata
-jinja2
+jinja2==3.0.3
 jsonschema
 pydantic
 pygeofilter
@@ -13,7 +13,10 @@ pytz
 PyYAML
 rasterio
 requests
-shapely<2.0
+#shapely<2.0
+shapely==2.0.1
 SQLAlchemy<2.0.0
+psycopg2
+geoalchemy2
 tinydb
 unicodecsv

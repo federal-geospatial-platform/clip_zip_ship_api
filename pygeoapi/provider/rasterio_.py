@@ -29,7 +29,8 @@
 
 import logging
 
-from pyproj import CRS, Transformer
+import pyproj
+from pyproj import CRS, Proj, Transformer
 import rasterio
 from rasterio.io import MemoryFile
 import rasterio.mask
@@ -37,6 +38,8 @@ import rasterio.mask
 from pygeoapi.provider.base import (BaseProvider, ProviderConnectionError,
                                     ProviderQueryError)
 from pygeoapi.util import read_data
+import shapely
+from functools import partial
 
 LOGGER = logging.getLogger(__name__)
 
@@ -162,12 +165,16 @@ class RasterioProvider(BaseProvider):
         return rangetype
 
     def query(self, properties=[], subsets={}, bbox=None, bbox_crs=4326,
+              geom=None, geom_crs=4326,
               datetime_=None, format_='json', **kwargs):
         """
-        Extract data from collection collection
+        Extract data from collection
         :param properties: list of bands
         :param subsets: dict of subset names with lists of ranges
         :param bbox: bounding box [minx,miny,maxx,maxy]
+        :param bbox_crs: bounding box crs
+        :param geom: geometry as wkt
+        :param geom_crs: geometry crs
         :param datetime_: temporal (datestamp or extent)
         :param format_: data format of output
 
@@ -196,7 +203,47 @@ class RasterioProvider(BaseProvider):
             LOGGER.warning(msg)
             raise ProviderQueryError(msg)
 
-        if len(bbox) > 0:
+        if geom:
+            # Load the wkt as a shapes (GeoJSON)
+            shapes = shapely.wkt.loads(geom)
+
+            crs_src = CRS.from_epsg(geom_crs)
+
+            if self.options and 'crs' in self.options:
+                crs_dest = CRS.from_string(self.options['crs'])
+            else:
+                crs_dest = self._data.crs
+
+            if crs_src == crs_dest:
+                LOGGER.debug('source geom CRS and data CRS are the same')
+
+                # Make it as GeoJSON
+                shapes = shapely.geometry.mapping(shapes)
+
+            else:
+                LOGGER.debug('source geom CRS and data CRS are different')
+                LOGGER.debug('reprojecting geom into native coordinates')
+
+                # <2.0 shapely, sample code not working!
+                # Transform
+                #project = partial(pyproj.transform, crs_src, crs_dest)
+                #shapes = shapely.ops.transform(project, shapes)
+                
+                # >2.0 shapely
+                # Transform
+                project = Transformer.from_crs(crs_src, crs_dest, always_xy=True)
+                shapes = shapely.ops.transform(project.transform, shapes)
+
+                # Store the bbox representation for rasterio's ouput
+                bbox = shapes.bounds
+
+                # Make it as GeoJSON
+                shapes = shapely.geometry.mapping(shapes)
+
+            # Make it an array
+            shapes = [shapes]
+
+        elif len(bbox) > 0:
             minx, miny, maxx, maxy = bbox
 
             crs_src = CRS.from_epsg(bbox_crs)
@@ -273,7 +320,7 @@ class RasterioProvider(BaseProvider):
 
             if shapes:  # spatial subset
                 try:
-                    LOGGER.debug('Clipping data with bbox')
+                    LOGGER.debug('Clipping data spatially')
                     out_image, out_transform = rasterio.mask.mask(
                         _data,
                         filled=False,
