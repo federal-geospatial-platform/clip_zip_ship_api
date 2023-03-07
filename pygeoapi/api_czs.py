@@ -77,8 +77,7 @@ class API_CZS(API):
             'processor': {
                 'name': 'pygeoapi.process.extract.ExtractProcessor',
                 'collections': deepcopy(the_resources),
-                's3_iam_role': "arn:aws:iam::862867296240:role/qgis-ecs-ddr-access-staging",
-                's3_bucket_name': "pygeoapi"
+                'settings': deepcopy(self.config["settings"])
             }
         }
 

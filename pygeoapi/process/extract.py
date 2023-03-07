@@ -27,15 +27,24 @@
 #
 # =================================================================
 
-import os, logging, json, zipfile, boto3, botocore
+import os, logging, json, zipfile, boto3, botocore, requests, psycopg2, uuid
+from psycopg2 import sql
+from xml.etree import cElementTree as ET
 
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
-
 from pygeoapi.util import (get_provider_by_type, to_json)
 from pygeoapi.plugin import load_plugin
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+# Configurations - placed here inside the plugin
+EXTRACT_FOLDER = "extractions"
+TABLE_NAME = "czs_collection"
+FIELD_COLLECTION_NAME = "collection_name"
+FIELD_METADATA_XML = "metadata_cat_xml"
+
 
 #: Process metadata and description
 PROCESS_METADATA = {
@@ -180,35 +189,91 @@ class ExtractProcessor(BaseProcessor):
             # Store the result in the response content
             content[c] = res
 
-            # Save to a JSON file
-            files.append(ExtractProcessor._save_file(c + ".json", res))
+            # Save to a JSON file and keep track
+            files.append(ExtractProcessor._save_file_json(c + ".json", res))
+
+            # Fetch the metadata xml for the collection
+            meta = self.query_collection(self.processor_def['settings']['database'], c)
+
+            # If found
+            if meta and meta['metadata_cat_xml']:
+                # Save the metadata for the collection and keep track
+                files.append(ExtractProcessor._save_file_xml(c + ".xml", meta['metadata_cat_xml']))
 
         # Destination zip file path and name
-        dest_zip = './Extraction.zip'
+        dest_zip = f'./{uuid.uuid4()}.zip'
 
         # Save all files to a zip file
         zip_file = ExtractProcessor._zip_file(files, dest_zip)
 
         # Put the zip file in S3
-        ExtractProcessor._connect_s3_send_file(self.processor_def['s3_iam_role'], self.processor_def['s3_bucket_name'], zip_file)
+        #ExtractProcessor._connect_s3_send_file(self.processor_def['settings']['s3_iam_role'], self.processor_def['settings']['s3_bucket_name'], zip_file)
 
         mimetype = 'application/json'
 
         return mimetype, content
 
 
+    def query_collection(self, database_info: dict, collection: str):
+        """
+        Queries the Collection information based on the given name.
+
+        :returns: The information on a collection.
+        """
+
+        # Connect to the database
+        with psycopg2.connect(host=database_info['host'], port=database_info['port'], dbname=database_info['dbname'],
+                              user=database_info['user'], password=database_info['password'], sslmode="allow") as conn:
+            # Open a cursor
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                str_query = """SELECT {field_collection_name},
+                                      {field_collection_metadata}::text
+                               FROM {table_name} WHERE {field_collection_name}=%s"""
+
+                # Query in the database
+                query = sql.SQL(str_query).format(
+                    field_collection_name=sql.Identifier(FIELD_COLLECTION_NAME),
+                    field_collection_metadata=sql.Identifier(FIELD_METADATA_XML),
+                    table_name=sql.Identifier(database_info['dbname'], TABLE_NAME))
+
+                # Execute cursor
+                cur.execute(query, (collection,))
+
+                # Fetch
+                res = cur.fetchall()
+                if len(res) > 0:
+                    return res[0]
+                return None
+
+
     @staticmethod
-    def _save_file(file_name: str, content: dict):
-        with open(f'./{file_name}', 'w') as f:
-            json.dump(content, f)
+    def _save_file_json(file_name: str, content: dict):
+        if not os.path.exists(f'./{EXTRACT_FOLDER}'):
+            os.makedirs(f'./{EXTRACT_FOLDER}')
+        with open(f'./{EXTRACT_FOLDER}/{file_name}', 'w', encoding='utf-8') as f:
+            json.dump(content, f, indent=4)
+        return file_name
+
+
+    @staticmethod
+    def _save_file_xml(file_name: str, content: dict):
+        if not os.path.exists(f'./{EXTRACT_FOLDER}'):
+            os.makedirs(f'./{EXTRACT_FOLDER}')
+        with open(f'./{EXTRACT_FOLDER}/{file_name}', 'w', encoding='utf-8') as f:
+            f.write(content)
         return file_name
 
 
     @staticmethod
     def _zip_file(file_names: list, zip_file_name: str):
-        with zipfile.ZipFile(zip_file_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        if not os.path.exists(f'./{EXTRACT_FOLDER}'):
+            os.makedirs(f'./{EXTRACT_FOLDER}')
+        with zipfile.ZipFile(f"./{EXTRACT_FOLDER}/{zip_file_name}", 'w', zipfile.ZIP_DEFLATED) as zipf:
             for f in file_names:
-                zipf.write(f'./{f}')
+                # Write the file in the zip
+                zipf.write(f'./{EXTRACT_FOLDER}/{f}', f'./{f}')
+                # Delete the file now that it's in the zip
+                os.remove(f'./{EXTRACT_FOLDER}/{f}')
             zipf.close()
             return zipf
 
