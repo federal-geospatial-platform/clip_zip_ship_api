@@ -208,7 +208,8 @@ class ExtractProcessor(BaseProcessor):
 
         # Put the zip file in S3
         #ExtractProcessor._connect_s3_send_file(self.processor_def['settings']['s3_iam_role'], self.processor_def['settings']['s3_bucket_name'], zip_file)
-
+        # Test comment pour GIT
+        
         mimetype = 'application/json'
 
         return mimetype, content
