@@ -142,6 +142,12 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
 
     def on_query_finalize(self, content: dict):
+        """
+        Overrides the finalization process.
+        Now that the query on each collection has happened and we have the results, we create
+        a zip file and place the zip in a S3 Bucket.
+        """
+
         # The files that we want to zip
         files = []
 
