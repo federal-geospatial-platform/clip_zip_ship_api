@@ -151,7 +151,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
             files.append(ExtractNRCanProcessor._save_file_json(c, content[c]))
 
             # Fetch the metadata xml for the collection
-            meta = ExtractNRCanProcessor.query_collection(self.processor_def['settings']['database'], c)
+            meta = ExtractNRCanProcessor.query_collection_metadata(self.processor_def['settings']['database'], c)
 
             # If found
             if meta and meta['metadata_cat_xml']:
@@ -169,7 +169,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
 
     @staticmethod
-    def query_collection(database_info: dict, collection: str):
+    def query_collection_metadata(database_info: dict, collection: str):
         """
         Queries the Collection metadata information based on the given name.
 
