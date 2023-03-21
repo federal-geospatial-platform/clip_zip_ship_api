@@ -31,7 +31,7 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 #
-# ========================================================================
+# =================================================================
 """ Root level code of pygeoapi, parsing content provided by web framework.
 Returns content from plugins and sets responses.
 """
