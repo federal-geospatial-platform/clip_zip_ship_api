@@ -48,13 +48,13 @@
 
 import logging
 
-from sqlalchemy import create_engine, MetaData, PrimaryKeyConstraint, asc, desc  # noqa
+from sqlalchemy import create_engine, Column, MetaData, PrimaryKeyConstraint, asc, desc  # noqa
 from sqlalchemy.exc import InvalidRequestError, OperationalError
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session, load_only
 from sqlalchemy.sql.expression import and_
 from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
-from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_PolygonFromText
+from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_PolygonFromText, ST_Intersection
 from geoalchemy2.shape import to_shape
 from pygeofilter.backends.sqlalchemy.evaluate import to_filter
 import shapely
@@ -114,7 +114,7 @@ class PostgreSQLProvider(BaseProvider):
               geom_crs=None, data_crs=None,
               datetime_=None, properties=[], sortby=[],
               select_properties=[], skip_geometry=False, q=None,
-              filterq=None, **kwargs):
+              filterq=None, clip=False, **kwargs):
         """
         Query Postgis for all the content.
         e,g: http://localhost:5000/collections/hotosm_bdi_waterways/items?
@@ -154,15 +154,25 @@ class PostgreSQLProvider(BaseProvider):
                                                              skip_geometry)
 
         LOGGER.debug('Querying PostGIS')
+
         # Execute query within self-closing database Session context
         with Session(self._engine) as session:
-            results = (session.query(self.table_model)
-                       .filter(property_filters)
-                       .filter(cql_filters)
-                       .filter(spat_filter)
-                       .order_by(*order_by_clauses)
-                       .options(selected_properties)
-                       .offset(offset))
+            if clip:
+                results = (session.query(self.table_model, ST_Intersection(getattr(self.table_model, self.geom), ST_PolygonFromText(geom_wkt, geom_crs)).label('inters'))
+                           .filter(property_filters)
+                           .filter(cql_filters)
+                           .filter(spat_filter)
+                           .order_by(*order_by_clauses)
+                           .options(selected_properties)
+                           .offset(offset))
+            else:
+                results = (session.query(self.table_model)
+                           .filter(property_filters)
+                           .filter(cql_filters)
+                           .filter(spat_filter)
+                           .order_by(*order_by_clauses)
+                           .options(selected_properties)
+                           .offset(offset))
 
             matched = results.count()
             if limit < matched:
@@ -185,7 +195,19 @@ class PostgreSQLProvider(BaseProvider):
                 return response
 
             for item in results.limit(limit):
-                response['features'].append(self._sqlalchemy_to_feature(item))
+                if clip:
+                    # Default to feature, with item[0]
+                    obj = self._sqlalchemy_to_feature(item[0])
+
+                    # Do more with say item[1], item[2], ...
+                    shapely_geom = to_shape(item[1])
+                    geojson_geom = shapely.geometry.mapping(shapely_geom)
+                    obj['geometry_clipped'] = geojson_geom
+                    response['features'].append(obj)
+
+                else:
+                    # Default
+                    response['features'].append(self._sqlalchemy_to_feature(item))
 
         return response
 

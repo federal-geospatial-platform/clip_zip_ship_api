@@ -1627,6 +1627,9 @@ class API:
                 HTTPStatus.BAD_REQUEST, headers, request.format,
                 'InvalidParameterValue', msg)
 
+        # Grab the clip parameter if existing
+        clip = request.params.get('clip') or False
+
         LOGGER.debug('Processing datetime parameter')
         datetime_ = request.params.get('datetime')
         try:
@@ -1770,7 +1773,8 @@ class API:
                               sortby=sortby,
                               select_properties=select_properties,
                               skip_geometry=skip_geometry,
-                              q=q, language=prv_locale, filterq=filter_)
+                              q=q, language=prv_locale, filterq=filter_,
+                              clip=clip)
         except ProviderConnectionError as err:
             LOGGER.error(err)
             msg = 'connection error (check logs)'
