@@ -27,7 +27,7 @@
 #
 # =================================================================
 
-import os, logging, json, zipfile, boto3, botocore, requests, psycopg2, uuid
+import os, logging
 from psycopg2 import sql
 from xml.etree import cElementTree as ET
 
@@ -149,16 +149,16 @@ class ExtractProcessor(BaseProcessor):
         colls = data['collections']
 
         # For each collection to query
-        content = {}
+        query_res = {}
         for c in colls:
             # Call on query with it which will query the collection based on its provider
-            content[c] = self.on_query(c, geom, geom_crs)
+            query_res[c] = self.on_query(c, geom, geom_crs)
 
         # Finalize the results
-        self.on_query_finalize(content)
+        self.on_query_finalize(data, query_res)
 
         # Return result
-        return self.on_query_results(content)
+        return self.on_query_results(query_res)
 
     def on_query(self, coll_name: str, geom_wkt: str, geom_crs: int):
         """
@@ -181,7 +181,7 @@ class ExtractProcessor(BaseProcessor):
 
         # If the collection has a provider of type feature
         if c_type == "feature":
-            # Query using the provider logic
+            # Query using the provider logic and clip = True!
             res = p.query(offset=0, limit=10,
                           resulttype='results', bbox=None,
                           bbox_crs=None, geom_wkt=geom_wkt, geom_crs=geom_crs,
@@ -189,7 +189,8 @@ class ExtractProcessor(BaseProcessor):
                           sortby=[],
                           select_properties=[],
                           skip_geometry=False,
-                          q=None, language='en', filterq=None)
+                          q=None, language='en', filterq=None,
+                          clip=True)
 
         elif c_type == "coverage":
             # Query using the provider logic
@@ -206,20 +207,20 @@ class ExtractProcessor(BaseProcessor):
         # Return the query result
         return res
 
-    def on_query_finalize(self, content: dict):
+    def on_query_finalize(self, data: dict, query_res: dict):
         """
         Override this method to do further things with the queried results
         """
 
         pass
 
-    def on_query_results(self, content: dict):
+    def on_query_results(self, query_res: dict):
         """
         Override this method to return something else than the default json of the results
         """
 
-        # Return the content
-        return 'application/json', content
+        # Return the query results
+        return 'application/json', query_res
 
     @staticmethod
     def _get_collection_type_from_providers(providers: list):
