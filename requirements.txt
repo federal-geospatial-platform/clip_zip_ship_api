@@ -1,6 +1,7 @@
 Babel
 boto3
 click>7,<=8
+emails
 Flask
 jinja2==3.0.3
 jsonschema
