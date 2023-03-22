@@ -228,7 +228,7 @@ class RasterioProvider(BaseProvider):
                 # Transform
                 #project = partial(pyproj.transform, crs_src, crs_dest)
                 #shapes = shapely.ops.transform(project, shapes)
-                
+
                 # >2.0 shapely
                 # Transform
                 project = Transformer.from_crs(crs_src, crs_dest, always_xy=True)
