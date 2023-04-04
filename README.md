@@ -14,4 +14,9 @@ For example:
  - In `pygeoapi/pygeoapi/process/` there are 2 new process classes: (1) `extract.py` and (2) `extract_nrcan.py`. The former adds a process that could eventually be pushed back for everyone using pygeoapi to benefit. The later inherits from the former and adds NRCan-related business logic.
 
 This fork also:
-- Implemented custom features for querying using the rasterio and postgresql providers such as sending a custom crs, sending a geometry wkt (instead of a bbox), returning not only the features, but the clipped features when specified (for the postgresql provider), and more..
+- Implemented custom features for:
+ - Querying enhancements when using the rasterio provider:
+  - Such as sending a geometry wkt and geometry crs
+ - Querying enhancements when using the postgresql provider:
+  - Such as sending a geometry wkt and geometry crs (at the time of this writing, the cql filter isn't working to query using other crs than 4326)
+  - Returning not only the features, but also the clipped features when wanted
