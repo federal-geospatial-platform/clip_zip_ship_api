@@ -29,8 +29,7 @@
 
 import logging
 
-import pyproj
-from pyproj import CRS, Proj, Transformer
+from pyproj import CRS, Transformer
 import rasterio
 from rasterio.io import MemoryFile
 import rasterio.mask
