@@ -438,7 +438,7 @@ class APIRequest:
 
         # Format not specified: get from Accept headers (MIME types)
         # e.g. format_ = 'text/html'
-        h = headers.get('accept', headers.get('Accept', '')).strip()  # noqa
+        h = headers.get('accept', headers.get('Accept', '')).strip() # noqa
         (fmts, mimes) = zip(*FORMAT_TYPES.items())
         # basic support for complex types (i.e. with "q=0.x")
         for type_ in (t.split(';')[0].strip() for t in h.split(',') if t):
@@ -1159,7 +1159,7 @@ class API:
                 HTTPStatus.BAD_REQUEST, headers, request.format,
                 'InvalidParameterValue', msg)
 
-        # Filter by bbox
+        # Filter spatially
         collections = self.on_description_filter_spatially(collections, geom, geom_crs)
 
         if all([dataset is not None, dataset not in collections.keys()]):
@@ -2274,14 +2274,13 @@ class API:
         else:
             skip_geometry = False
 
-        # @TODO: CQL STUFF Not implemented yet in POST, so uncommented for now
-        # LOGGER.debug('Processing filter-lang parameter')
+        LOGGER.debug('Processing filter-lang parameter')
         filter_lang = request.params.get('filter-lang')
-        # if filter_lang != 'cql-json':  # @TODO add check from the configuration
-        #     msg = 'Invalid filter language'
-        #     return self.get_exception(
-        #         HTTPStatus.BAD_REQUEST, headers, request.format,
-        #         'InvalidParameterValue', msg)
+        if filter_lang != 'cql-json':  # @TODO add check from the configuration
+            msg = 'Invalid filter language'
+            return self.get_exception(
+                HTTPStatus.BAD_REQUEST, headers, request.format,
+                'InvalidParameterValue', msg)
 
         LOGGER.debug('Querying provider')
         LOGGER.debug(f'offset: {offset}')
@@ -2300,15 +2299,14 @@ class API:
 
         LOGGER.debug('Processing headers')
 
-        # @TODO: CQL STUFF Not implemented yet in POST, so uncommented for now
-        # LOGGER.debug('Processing request content-type header')
-        # if (request_headers.get(
-        #     'Content-Type') or request_headers.get(
-        #         'content-type')) != 'application/query-cql-json':
-        #     msg = ('Invalid body content-type')
-        #     return self.get_exception(
-        #         HTTPStatus.BAD_REQUEST, headers, request.format,
-        #         'InvalidHeaderValue', msg)
+        LOGGER.debug('Processing request content-type header')
+        if (request_headers.get(
+            'Content-Type') or request_headers.get(
+                'content-type')) != 'application/query-cql-json':
+            msg = ('Invalid body content-type')
+            return self.get_exception(
+                HTTPStatus.BAD_REQUEST, headers, request.format,
+                'InvalidHeaderValue', msg)
 
         LOGGER.debug('Processing body')
 

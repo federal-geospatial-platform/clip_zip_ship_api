@@ -38,7 +38,6 @@ from pygeoapi.provider.base import (BaseProvider, ProviderConnectionError,
                                     ProviderQueryError)
 from pygeoapi.util import read_data
 import shapely
-from functools import partial
 
 LOGGER = logging.getLogger(__name__)
 
@@ -223,12 +222,13 @@ class RasterioProvider(BaseProvider):
                 LOGGER.debug('source geom CRS and data CRS are different')
                 LOGGER.debug('reprojecting geom into native coordinates')
 
-                # <2.0 shapely, sample code not working!
+                # shapely<2.0, sample code not working in shapely<2.0 :(
                 # Transform
+                #from functools import partial (import this to try it..)
                 #project = partial(pyproj.transform, crs_src, crs_dest)
                 #shapes = shapely.ops.transform(project, shapes)
 
-                # >2.0 shapely
+                # shapely>2.0
                 # Transform
                 project = Transformer.from_crs(crs_src, crs_dest, always_xy=True)
                 shapes = shapely.ops.transform(project.transform, shapes)

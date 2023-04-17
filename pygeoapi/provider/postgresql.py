@@ -200,11 +200,11 @@ class PostgreSQLProvider(BaseProvider):
             if resulttype == "hits" or not results:
                 response['numberReturned'] = 0
                 return response
-
+            crs_transform_out = self._get_crs_transform(crs_transform_spec)
             for item in results.limit(limit):
                 if clip:
                     # Default to feature, with item[0]
-                    obj = self._sqlalchemy_to_feature(item[0], crs_transform_spec)
+                    obj = self._sqlalchemy_to_feature(item[0], crs_transform_out)
 
                     # Do more with say item[1], item[2], ...
                     shapely_geom = to_shape(item[1])
@@ -215,7 +215,7 @@ class PostgreSQLProvider(BaseProvider):
                 else:
                     # Default
                     response['features'].append(
-                        self._sqlalchemy_to_feature(item, crs_transform_spec)
+                        self._sqlalchemy_to_feature(item, crs_transform_out)
                     )
 
         return response
