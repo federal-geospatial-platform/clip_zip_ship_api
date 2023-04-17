@@ -48,7 +48,6 @@ postgres_template=\
             search_path: null
         id_field: null
         table: null
-        crs: null
 '''
 
 
@@ -140,7 +139,6 @@ rasterio_template =\
         format:
             name:
             mimetype:
-        crs: null
 '''
 
 
@@ -191,7 +189,7 @@ def load_template_common(itemvalue, template, data):
     itemvalue["extents"]["spatial"]["crs"] = data["extents_spatial_crs"]
     itemvalue["providers"][0]["type"] = data["provider_type"]
     itemvalue["providers"][0]["name"] = data["provider_name"]
-    itemvalue["providers"][0]["crs"] = data["collection_crs"]
+    #itemvalue["providers"][0]["crs"] = data["collection_crs"]
 
 
 def load_template_postgres(template, data):
