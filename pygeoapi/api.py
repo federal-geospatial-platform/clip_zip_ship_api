@@ -2821,6 +2821,10 @@ class API:
             return self.get_exception(
                 HTTPStatus.NO_CONTENT, headers, format_,
                 'InvalidParameterValue', msg)
+        except ProviderRequestEntityTooLargeError as err:
+            return self.get_exception(
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE, headers, request.format,
+                'NoApplicableCode', str(err))
         except ProviderQueryError:
             msg = 'query error (check logs)'
             return self.get_exception(

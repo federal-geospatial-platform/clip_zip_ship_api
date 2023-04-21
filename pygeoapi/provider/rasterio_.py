@@ -35,7 +35,7 @@ from rasterio.io import MemoryFile
 import rasterio.mask
 
 from pygeoapi.provider.base import (BaseProvider, ProviderConnectionError,
-                                    ProviderQueryError)
+                                    ProviderQueryError, ProviderRequestEntityTooLargeError)
 from pygeoapi.util import read_data
 import shapely
 
@@ -62,6 +62,7 @@ class RasterioProvider(BaseProvider):
             self.num_bands = self._coverage_properties['num_bands']
             self.fields = [str(num) for num in range(1, self.num_bands+1)]
             self.native_format = provider_def['format']['name']
+            self.max_extraction_area = 100 * 1000* 1000 # 100 km2
         except Exception as err:
             LOGGER.warning(err)
             raise ProviderConnectionError(err)
@@ -210,7 +211,8 @@ class RasterioProvider(BaseProvider):
             if self.options and 'crs' in self.options:
                 crs_dest = CRS.from_string(self.options['crs'])
             else:
-                crs_dest = self._data.crs
+				print("yo")
+                crs_dest = CRS.from_epsg(self._data.crs.to_epsg())
 
             if crs_src == crs_dest:
                 LOGGER.debug('source geom CRS and data CRS are the same')
@@ -250,7 +252,7 @@ class RasterioProvider(BaseProvider):
             if self.options and 'crs' in self.options:
                 crs_dest = CRS.from_string(self.options['crs'])
             else:
-                crs_dest = self._data.crs
+                crs_dest = CRS.from_epsg(self._data.crs.to_epsg())
 
             if crs_src == crs_dest:
                 LOGGER.debug('source bbox CRS and data CRS are the same')
@@ -320,12 +322,24 @@ class RasterioProvider(BaseProvider):
             if shapes:  # spatial subset
                 try:
                     LOGGER.debug('Clipping data spatially')
-                    out_image, out_transform = rasterio.mask.mask(
-                        _data,
-                        filled=False,
-                        shapes=shapes,
-                        crop=True,
-                        indexes=args['indexes'])
+
+                    # Check the area of the extraction shape
+                    area = shapely.geometry.shape(shapes[0]).area
+
+                    # If the area is under the maximum
+                    if area < self.max_extraction_area:
+                        out_image, out_transform = rasterio.mask.mask(
+                            _data,
+                            filled=False,
+                            shapes=shapes,
+                            crop=True,
+                            indexes=args['indexes'])
+
+                    else:
+                        msg = f'clipping area was {area} which is over {self.max_extraction_area}'
+                        LOGGER.warning(msg)
+                        raise ProviderRequestEntityTooLargeError(msg)
+
                 except ValueError as err:
                     LOGGER.error(err)
                     raise ProviderQueryError(err)
