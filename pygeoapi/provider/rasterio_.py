@@ -211,10 +211,6 @@ class RasterioProvider(BaseProvider):
             if self.options and 'crs' in self.options:
                 crs_dest = CRS.from_string(self.options['crs'])
             else:
-                print("yo")
-                print(self._data.crs.to_epsg())
-                print(self._data.crs)
-                print(CRS.from_epsg(self._data.crs.to_epsg()))
                 crs_dest = CRS.from_epsg(self._data.crs.to_epsg())
 
             if crs_src == crs_dest:
@@ -229,8 +225,9 @@ class RasterioProvider(BaseProvider):
 
                 # shapely<2.0, sample code not working in shapely<2.0 :(
                 # Transform
-                #from functools import partial (import this to try it..)
-                #project = partial(pyproj.transform, crs_src, crs_dest)
+                #import pyproj
+                #from functools import partial # (import this to try it..)
+                #project = partial(pyproj.transform, crs_src.to_string(), crs_dest.to_string())
                 #shapes = shapely.ops.transform(project, shapes)
 
                 # shapely>2.0
@@ -339,7 +336,7 @@ class RasterioProvider(BaseProvider):
                             indexes=args['indexes'])
 
                     else:
-                        msg = f'clipping area was {area} which is over {self.max_extraction_area}'
+                        msg = f'clipping area was {area / 1000000} km2 which is over {self.max_extraction_area / 1000000} km2'
                         LOGGER.warning(msg)
                         raise ProviderRequestEntityTooLargeError(msg)
 
