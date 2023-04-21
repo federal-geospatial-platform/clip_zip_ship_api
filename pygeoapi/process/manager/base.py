@@ -247,6 +247,7 @@ class BaseManager:
             code = 'InvalidParameterValue'
             outputs = {
                 'code': code,
+                'error': err,
                 'description': 'Error updating job'
             }
             LOGGER.error(err)
