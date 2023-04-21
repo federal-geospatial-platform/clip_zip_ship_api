@@ -62,7 +62,7 @@ class RasterioProvider(BaseProvider):
             self.num_bands = self._coverage_properties['num_bands']
             self.fields = [str(num) for num in range(1, self.num_bands+1)]
             self.native_format = provider_def['format']['name']
-            self.max_extraction_area = 100 * 1000* 1000 # 100 km2
+            self.max_extraction_area = 1000 * (1000 * 1000) # 1000 km2
         except Exception as err:
             LOGGER.warning(err)
             raise ProviderConnectionError(err)
@@ -211,7 +211,10 @@ class RasterioProvider(BaseProvider):
             if self.options and 'crs' in self.options:
                 crs_dest = CRS.from_string(self.options['crs'])
             else:
-				print("yo")
+                print("yo")
+                print(self._data.crs.to_epsg())
+                print(self._data.crs)
+                print(CRS.from_epsg(self._data.crs.to_epsg()))
                 crs_dest = CRS.from_epsg(self._data.crs.to_epsg())
 
             if crs_src == crs_dest:
