@@ -173,7 +173,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         zip_file = ExtractNRCanProcessor._zip_file(files, dest_zip)
 
         # Put the zip file in S3 (waiting on a working iam role from Geoffroy)
-        #ExtractNRCanProcessor._connect_s3_send_file(self.processor_def['settings']['s3_iam_role'], self.processor_def['settings']['s3_bucket_name'], dest_zip)
+        #ExtractNRCanProcessor._connect_s3_send_file(self.processor_def['settings']['s3']['iam_role'], self.processor_def['settings']['s3']['bucket_name'], dest_zip)
 
         # Send email
         ExtractNRCanProcessor.send_email(self.processor_def['settings']['email'], email,

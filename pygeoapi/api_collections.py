@@ -17,6 +17,9 @@ postgres_template=\
     theme:
         en: null
         fr: null
+    project: null
+    short_name: null
+    org_schema: null
     description:
         en: null
         fr: null
@@ -51,55 +54,6 @@ postgres_template=\
 '''
 
 
-# This is the data structure template for a WFS provider.
-wfs_template=\
-'''
-    type: null
-    title:
-        en: null
-        fr: null
-    parent:
-        en: null
-        fr: null
-    theme:
-        en: null
-        fr: null
-    description:
-        en: null
-        fr: null
-    keywords:
-        en: null
-        fr: null
-    links:
-    -   type: null
-        rel: null
-        title: null
-        href: null
-        hreflang: null
-    extents:
-        spatial:
-            bbox: null
-            crs: null
-        temporal:
-            begin: null
-            end: null
-    providers:
-    -   type: null
-        name: null
-        data:
-            source_type: null
-            source: ''
-            source_srs: null
-            target_srs: null
-            source_capabilities: null
-            source_options: null
-            gdal_ogr_options: null
-        id_field: null
-        layer: null
-'''
-
-
-
 # This is the data structure template for the rasterio provider.
 rasterio_template =\
 '''
@@ -113,6 +67,9 @@ rasterio_template =\
     theme:
         en: null
         fr: null
+    project: null
+    short_name: null
+    org_schema: null
     description:
         en: null
         fr: null
@@ -176,6 +133,9 @@ def load_template_common(itemvalue, template, data):
     itemvalue["parent"]["fr"] = data["collection_parent_fr"]
     itemvalue["theme"]["en"] = data["collection_theme_en"]
     itemvalue["theme"]["fr"] = data["collection_theme_fr"]
+    itemvalue["project"] = data["collection_project"]
+    itemvalue["short_name"] = data["collection_short_name"]
+    itemvalue["org_schema"] = data["collection_org_schema"]
     itemvalue["description"]["en"] = data["collection_description_en"]
     itemvalue["description"]["fr"] = data["collection_description_fr"]
     itemvalue["keywords"]["en"] = data["collection_keywords_en"]
@@ -247,26 +207,6 @@ def load_template_rasterio(template, data):
     if data["format_name"] != None:
         itemvalue["providers"][0]["format"]["name"] = data["format_name"]
         itemvalue["providers"][0]["format"]["mimetype"] = data["format_mimetype"]
-    return itemvalue
-
-
-def load_template_wfs(template, data):
-    '''The function takes a template and a list of records and returns a dictionary of records
-
-    Parameters
-    ----------
-    template
-        the template file
-    dataRecords
-        a list of tuples containing the data records
-
-    Returns
-    -------
-        A dictionary of dictionaries. The key is the collection name of the record in the database. The value is a dictionary of the record.
-
-    '''
-    itemvalue = yaml.load(template, Loader=yaml.FullLoader)
-    load_template_common(itemvalue, template, data)
     return itemvalue
 
 
