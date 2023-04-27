@@ -32,6 +32,7 @@ from psycopg2 import sql
 from xml.etree import cElementTree as ET
 
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
+from pygeoapi.provider.base import ProviderQueryError
 from pygeoapi.util import (get_provider_by_type, to_json)
 from pygeoapi.plugin import load_plugin
 
@@ -148,17 +149,22 @@ class ExtractProcessor(BaseProcessor):
         geom_crs = data['geom_crs']
         colls = data['collections']
 
-        # For each collection to query
-        query_res = {}
-        for c in colls:
-            # Call on query with it which will query the collection based on its provider
-            query_res[c] = self.on_query(c, geom, geom_crs)
+        # Validate execution
+        if self.on_query_validate_execution(geom, geom_crs, colls):
+            # For each collection to query
+            query_res = {}
+            for c in colls:
+                # Call on query with it which will query the collection based on its provider
+                query_res[c] = self.on_query(c, geom, geom_crs)
 
-        # Finalize the results
-        self.on_query_finalize(data, query_res)
+            # Finalize the results
+            self.on_query_finalize(data, query_res)
 
-        # Return result
-        return self.on_query_results(query_res)
+            # Return result
+            return self.on_query_results(query_res)
+
+        else:
+            raise ProviderQueryError()
 
     def on_query(self, coll_name: str, geom_wkt: str, geom_crs: int):
         """
@@ -206,6 +212,12 @@ class ExtractProcessor(BaseProcessor):
 
         # Return the query result
         return res
+
+    def on_query_validate_execution():
+        """
+        Override this method to perform validations pre-execution
+        """
+        return True
 
     def on_query_finalize(self, data: dict, query_res: dict):
         """

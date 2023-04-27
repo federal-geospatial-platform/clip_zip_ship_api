@@ -33,6 +33,7 @@ from xml.etree import cElementTree as ET
 from pygeoapi.process.extract import ExtractProcessor
 
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
+from pygeoapi.provider.base import ProviderRequestEntityTooLargeError
 from pygeoapi.util import (get_provider_by_type, to_json)
 from pygeoapi.plugin import load_plugin
 
@@ -139,6 +140,16 @@ class ExtractNRCanProcessor(ExtractProcessor):
         """
 
         super().__init__(processor_def, PROCESS_METADATA)
+
+    def on_query_validate_execution(self, geom: str, geom_crs: int, colls: list):
+        """
+        Override this method to perform validations pre-execution
+        """
+        if not geom:
+            raise ProviderRequestEntityTooLargeError()
+
+        # All good
+        return True
 
     def on_query_finalize(self, data: dict, query_res: dict):
         """
