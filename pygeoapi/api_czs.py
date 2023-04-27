@@ -11,6 +11,7 @@ from pygeoapi.linked_data import jsonldify
 from pygeoapi.api import API, APIRequest, pre_process
 from pygeoapi.util import (to_json, yaml_load)
 from pygeoapi import api_collections
+from pygeoapi import api_aws
 from copy import deepcopy
 
 
@@ -38,8 +39,11 @@ class API_CZS(API):
         :returns: the resources that PyGeoAPI should work with
         """
 
-        # print("on_load_resources")
-        #return resources   # Uncomment this to run on resources from config file (not load from db)
+        # Reads the AWS Secrets manager to retrieve sensitive parameters
+        aws_secrets = api_aws.get_secret("ca-central-1", "secretsmanager", "/stage/cdtk_api_pygeoapi")
+        self.config["settings"]["database"] = aws_secrets["database"]
+        self.config["settings"]["email"] = aws_secrets["email"]
+        self.config["settings"]["s3"] = aws_secrets["s3"]
 
         # Open the connection
         with open_conn(self.config["settings"]["database"]) as conn:
@@ -154,6 +158,13 @@ class API_CZS(API):
 
             else:
                 active_coll['parent'] = input_coll['parent']
+
+        if 'project' in input_coll:
+            active_coll['project'] = input_coll['project']
+        if 'short_name' in input_coll:
+            active_coll['short_name'] = input_coll['short_name']
+        if 'org_schema' in input_coll:
+            active_coll['org_schema'] = input_coll['org_schema']
 
 
     @pre_process
