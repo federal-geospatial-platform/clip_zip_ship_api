@@ -69,7 +69,7 @@ from pygeoapi.provider.base import (
     ProviderGenericError, ProviderConnectionError, ProviderNotFoundError,
     ProviderInvalidDataError, ProviderInvalidQueryError, ProviderNoDataError,
     ProviderQueryError, ProviderItemNotFoundError, ProviderTypeError,
-    ProviderRequestEntityTooLargeError)
+    ProviderPreconditionFailed, ProviderRequestEntityTooLargeError)
 
 from pygeoapi.provider.tile import (ProviderTileNotFoundError,
                                     ProviderTileQueryError,
@@ -2812,20 +2812,30 @@ class API:
         LOGGER.debug('Querying coverage')
         try:
             data = p.query(**query_args)
+
         except ProviderInvalidQueryError as err:
             msg = f'query error: {err}'
             return self.get_exception(
                 HTTPStatus.BAD_REQUEST, headers, format_,
                 'InvalidParameterValue', msg)
+
         except ProviderNoDataError:
             msg = 'No data found'
             return self.get_exception(
                 HTTPStatus.NO_CONTENT, headers, format_,
                 'InvalidParameterValue', msg)
+
+        except ProviderPreconditionFailed as err:
+            msg = f'precondition failed: {err}'
+            return self.get_exception(
+                HTTPStatus.PRECONDITION_FAILED, headers, format_,
+                'PreconditionFailed', msg)
+
         except ProviderRequestEntityTooLargeError as err:
             return self.get_exception(
-                HTTPStatus.REQUEST_ENTITY_TOO_LARGE, headers, request.format,
+                HTTPStatus.REQUEST_ENTITY_TOO_LARGE, headers, format_,
                 'NoApplicableCode', str(err))
+
         except ProviderQueryError:
             msg = 'query error (check logs)'
             return self.get_exception(
@@ -3862,8 +3872,15 @@ class API:
             headers['Location'] = f'{self.base_url}/jobs/{job_id}'
 
             # Depending on the execution mode and output
-            if execution_mode == None and 'error' in outputs and isinstance(outputs['error'], ProviderRequestEntityTooLargeError):
+            if execution_mode == None and 'error' in outputs and \
+               (isinstance(outputs['error'], ProviderPreconditionFailed) or \
+                isinstance(outputs['error'], ProviderRequestEntityTooLargeError)):
                 raise outputs['error']
+
+        except ProviderPreconditionFailed as err:
+            return self.get_exception(
+                HTTPStatus.PRECONDITION_FAILED, headers, request.format,
+                'PreconditionFailed', str(err))
 
         except ProviderRequestEntityTooLargeError as err:
             return self.get_exception(
@@ -4146,11 +4163,13 @@ class API:
             msg = 'No data found'
             return self.get_exception(
                 HTTPStatus.NO_CONTENT, headers, request.format, 'NoMatch', msg)
+
         except ProviderQueryError:
             msg = 'query error (check logs)'
             return self.get_exception(
                 HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
                 'NoApplicableCode', msg)
+
         except ProviderRequestEntityTooLargeError as err:
             return self.get_exception(
                 HTTPStatus.REQUEST_ENTITY_TOO_LARGE, headers, request.format,

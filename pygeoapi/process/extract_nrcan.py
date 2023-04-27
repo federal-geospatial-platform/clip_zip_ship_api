@@ -34,7 +34,7 @@ from xml.etree import cElementTree as ET
 from pygeoapi.process.extract import ExtractProcessor
 
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
-from pygeoapi.provider.base import ProviderRequestEntityTooLargeError
+from pygeoapi.provider.base import ProviderPreconditionFailed, ProviderRequestEntityTooLargeError
 from pygeoapi.util import (get_provider_by_type, to_json)
 from pygeoapi.plugin import load_plugin
 
@@ -150,7 +150,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         if not geom:
             msg = f'clipping area was undefined'
             LOGGER.warning(msg)
-            raise ProviderRequestEntityTooLargeError(msg)
+            raise ProviderPreconditionFailed(msg)
 
         # Read all collection information
         # collections = [self.processor_def['collections'][coll_name] for coll_name in colls]

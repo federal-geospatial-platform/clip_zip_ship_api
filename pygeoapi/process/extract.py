@@ -32,7 +32,7 @@ from psycopg2 import sql
 from xml.etree import cElementTree as ET
 
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
-from pygeoapi.provider.base import ProviderQueryError
+from pygeoapi.provider.base import ProviderQueryError, ProviderPreconditionFailed
 from pygeoapi.util import (get_provider_by_type, to_json)
 from pygeoapi.plugin import load_plugin
 
@@ -164,7 +164,7 @@ class ExtractProcessor(BaseProcessor):
             return self.on_query_results(query_res)
 
         else:
-            raise ProviderQueryError()
+            raise ProviderPreconditionFailed()
 
     def on_query(self, coll_name: str, geom_wkt: str, geom_crs: int):
         """
