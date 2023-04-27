@@ -164,7 +164,7 @@ class PostgreSQLProvider(BaseProvider):
 
         # Execute query within self-closing database Session context
         with Session(self._engine) as session:
-            if clip:
+            if clip and geom_wkt:
                 results = (session.query(self.table_model, ST_Intersection(getattr(self.table_model, self.geom), ST_PolygonFromText(geom_wkt, geom_crs)).label('inters'))
                            .filter(property_filters)
                            .filter(cql_filters)
@@ -202,7 +202,7 @@ class PostgreSQLProvider(BaseProvider):
                 return response
             crs_transform_out = self._get_crs_transform(crs_transform_spec)
             for item in results.limit(limit):
-                if clip:
+                if clip and geom_wkt:
                     # Default to feature, with item[0]
                     obj = self._sqlalchemy_to_feature(item[0], crs_transform_out)
 
