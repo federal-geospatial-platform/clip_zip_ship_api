@@ -35,7 +35,7 @@ from rasterio.io import MemoryFile
 import rasterio.mask
 
 from pygeoapi.provider.base import (BaseProvider, ProviderConnectionError,
-                                    ProviderQueryError, ProviderRequestEntityTooLargeError)
+                                    ProviderQueryError)
 from pygeoapi.util import read_data
 import shapely
 
@@ -62,7 +62,6 @@ class RasterioProvider(BaseProvider):
             self.num_bands = self._coverage_properties['num_bands']
             self.fields = [str(num) for num in range(1, self.num_bands+1)]
             self.native_format = provider_def['format']['name']
-            self.max_extraction_area = 1000 * (1000 * 1000) # 1000 km2
         except Exception as err:
             LOGGER.warning(err)
             raise ProviderConnectionError(err)
@@ -323,22 +322,13 @@ class RasterioProvider(BaseProvider):
                 try:
                     LOGGER.debug('Clipping data spatially')
 
-                    # Check the area of the extraction shape
-                    area = shapely.geometry.shape(shapes[0]).area
-
-                    # If the area is under the maximum
-                    if area < self.max_extraction_area:
-                        out_image, out_transform = rasterio.mask.mask(
+                    # Query
+                    out_image, out_transform = rasterio.mask.mask(
                             _data,
                             filled=False,
                             shapes=shapes,
                             crop=True,
                             indexes=args['indexes'])
-
-                    else:
-                        msg = f'clipping area was {area / 1000000} km2 which is over {self.max_extraction_area / 1000000} km2'
-                        LOGGER.warning(msg)
-                        raise ProviderRequestEntityTooLargeError(msg)
 
                 except ValueError as err:
                     LOGGER.error(err)

@@ -28,6 +28,7 @@
 # =================================================================
 
 import os, logging, json, zipfile, boto3, botocore, requests, psycopg2, uuid, emails
+import shapely, pyproj
 from psycopg2 import sql
 from xml.etree import cElementTree as ET
 from pygeoapi.process.extract import ExtractProcessor
@@ -140,13 +141,31 @@ class ExtractNRCanProcessor(ExtractProcessor):
         """
 
         super().__init__(processor_def, PROCESS_METADATA)
+        self.max_extraction_area = 1000 * (1000 * 1000) # 1000 km2
 
     def on_query_validate_execution(self, geom: str, geom_crs: int, colls: list):
         """
         Override this method to perform validations pre-execution
         """
         if not geom:
-            raise ProviderRequestEntityTooLargeError()
+            msg = f'clipping area was undefined'
+            LOGGER.warning(msg)
+            raise ProviderRequestEntityTooLargeError(msg)
+
+        # Read all collection information
+        # collections = [self.processor_def['collections'][coll_name] for coll_name in colls]
+
+        # Get list of collecitons of type coverage
+        # collections_cov = list(filter(lambda c: c['providers'][0]['type'] == "coverage", collections))
+
+        # Get the area of the geometry
+        area = ExtractNRCanProcessor.get_area_from_wkt(geom, geom_crs)
+
+        # If the area is over the maximum
+        if area > self.max_extraction_area:
+            msg = f'clipping area was {area / 1000000} km2 which is over {self.max_extraction_area / 1000000} km2'
+            LOGGER.warning(msg)
+            raise ProviderRequestEntityTooLargeError(msg)
 
         # All good
         return True
@@ -190,6 +209,18 @@ class ExtractNRCanProcessor(ExtractProcessor):
         ExtractNRCanProcessor.send_email(self.processor_def['settings']['email'], email,
                                          f"{self.processor_def['settings']['extract_url']}{os.path.basename(dest_zip)}", [], [],
                                          None)
+
+    @staticmethod
+    def get_area_from_wkt(geom_wkt: str, geom_crs: int):
+        # Load the geom from wkt using shapely
+        shapely_geom = shapely.wkt.loads(geom_wkt)
+
+        # Project it to 3978 for meters
+        project = pyproj.Transformer.from_crs('EPSG:' + str(geom_crs), 'EPSG:3978')
+        shapely_geom = shapely.ops.transform(project.transform, shapely_geom)
+
+        # Return the area
+        return shapely_geom.area
 
     @staticmethod
     def get_metadata_xml_from_coll_conf(catalog_url: str, coll_conf: dict):
