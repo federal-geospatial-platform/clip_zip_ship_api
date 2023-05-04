@@ -1787,7 +1787,6 @@ class API:
             self._set_content_crs_header(headers, provider_def, query_crs_uri)
 
         LOGGER.debug('Processing bbox-crs parameter')
-        bbox_crs = request.params.get('bbox-crs')
         if bbox_crs is not None:
             # Validate bbox-crs parameter
             if not bbox or len(bbox) == 0:
