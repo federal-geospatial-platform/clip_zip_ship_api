@@ -17,7 +17,7 @@ def get_secret(region: str, service_name: str, secret_key: str):
         get_secret_value_response = client.get_secret_value(
             SecretId=secret_key
         )
-    except ClientError as e:
+    except botocore.exceptions.ClientError as e:
         # For a list of exceptions thrown, see
         # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
         raise e
