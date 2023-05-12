@@ -84,6 +84,7 @@ rasterio_template =\
         temporal:
             begin: null
             end: null
+    wkt: null
     links:
     -   type: null
         rel: null
@@ -135,9 +136,9 @@ def load_template_common(itemvalue, template, data):
     itemvalue["parent"]["fr"] = data["collection_parent_fr"]
     itemvalue["theme"]["en"] = data["collection_theme_en"]
     itemvalue["theme"]["fr"] = data["collection_theme_fr"]
-    itemvalue["project"] = data["collection_project"]
     itemvalue["short_name"] = data["collection_short_name"]
     itemvalue["org_schema"] = data["collection_org_schema"]
+    itemvalue["wkt"] = data["wkt"]
     itemvalue["description"]["en"] = data["collection_description_en"]
     itemvalue["description"]["fr"] = data["collection_description_fr"]
     itemvalue["keywords"]["en"] = data["collection_keywords_en"]
@@ -217,7 +218,7 @@ def query_collections(conn, polygon_wkt: str, projection_id: int, projection_id_
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     # Query filter
-    spatial_filter = ("ST_Intersects(GEOM, ST_Transform(ST_GeomFromText('{polygon_wkt}', {projection_id})," + str(projection_id_data) + "))").format(polygon_wkt=polygon_wkt, projection_id=projection_id)
+    spatial_filter = f"ST_Intersects(GEOM, ST_Transform(ST_MakeValid(ST_GeomFromText('{polygon_wkt}', {projection_id}))," + str(projection_id_data) + "))"
 
     # SQL query
     sql_query = "SELECT * FROM {table} WHERE {spatial_filter} ORDER BY {field_coll_name}"
@@ -248,7 +249,7 @@ def fetch_collections(conn):
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     # SQL query
-    sql_query = "SELECT * FROM {table_coll} ORDER BY {order_field}"
+    sql_query = "SELECT *, ST_AsText(geom) as wkt FROM {table_coll} ORDER BY {order_field}"
 
     # Execute a statement
     cur.execute(sql.SQL(sql_query).format(table_coll=sql.Identifier(conn.info.dbname, "v_czs_collections"),

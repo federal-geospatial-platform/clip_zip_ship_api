@@ -139,6 +139,20 @@ class ExtractProcessor(BaseProcessor):
 
         super().__init__(processor_def, process_metadata)
 
+    def get_collection_type(self, coll_name: str):
+        # Read the configuration for it
+        c_conf = self.processor_def['collections'][coll_name]
+
+        # Get the collection type by its providers
+        return ExtractProcessor._get_collection_type_from_providers(c_conf['providers'])
+
+    def get_collection_coverage_mimetype(self, coll_name: str):
+        # Read the configuration for it
+        c_conf = self.processor_def['collections'][coll_name]
+
+        # Get the collection type by its providers
+        return ExtractProcessor._get_collection_mimetype_image_from_providers(c_conf['providers'])
+
     def execute(self, data):
         """
         Entry point of the execution process.
@@ -202,7 +216,8 @@ class ExtractProcessor(BaseProcessor):
             # Query using the provider logic
             query_args = {
                 'geom': geom_wkt,
-                'geom_crs': geom_crs
+                'geom_crs': geom_crs,
+                'format_': 'native'
             }
             res = p.query(**query_args)
 
@@ -242,6 +257,15 @@ class ExtractProcessor(BaseProcessor):
                 return "feature"
             elif p['type'] == "coverage":
                 return "coverage"
+        return None
+
+    @staticmethod
+    def _get_collection_mimetype_image_from_providers(providers: list):
+        # For each provider
+        for p in providers:
+            if p['type'] == "coverage":
+                if 'format' in p and 'mimetype' in p['format']:
+                    return p['format']['mimetype']
         return None
 
     def __repr__(self):

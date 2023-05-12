@@ -159,12 +159,14 @@ class API_CZS(API):
             else:
                 active_coll['parent'] = input_coll['parent']
 
-        if 'project' in input_coll:
-            active_coll['project'] = input_coll['project']
         if 'short_name' in input_coll:
             active_coll['short_name'] = input_coll['short_name']
         if 'org_schema' in input_coll:
             active_coll['org_schema'] = input_coll['org_schema']
+        if 'wkt' in input_coll:
+            active_coll['wkt'] = input_coll['wkt']
+        if 'providers' in input_coll and 'crs' in input_coll["providers"][0]:
+            active_coll['crs'] = input_coll["providers"][0]["crs"]
 
 
     @pre_process

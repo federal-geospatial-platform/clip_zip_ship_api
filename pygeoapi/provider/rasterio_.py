@@ -190,7 +190,7 @@ class RasterioProvider(BaseProvider):
         if not bbox:
             bbox = []
 
-        if all([not bands, not subsets, not bbox, format_ != 'json']):
+        if all([not bands, not subsets, not bbox, not geom, format_ != 'json']):
             LOGGER.debug('No parameters specified, returning native data')
             return read_data(self.data)
 

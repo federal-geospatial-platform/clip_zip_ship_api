@@ -29,6 +29,7 @@
 
 import os, logging, json, zipfile, requests, psycopg2, uuid, emails
 import shapely, pyproj
+from mimetypes import guess_extension
 from psycopg2 import sql
 from xml.etree import cElementTree as ET
 from pygeoapi.process.extract import ExtractProcessor
@@ -185,8 +186,14 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
         # For each collection result
         for c in query_res:
-            # Save to a JSON file and keep track
-            files.append(ExtractNRCanProcessor._save_file_json(c, query_res[c]))
+            # Depending on the type
+            if self.get_collection_type(c) == "coverage":
+                # Save coverage image and keep track
+                files.append(ExtractNRCanProcessor._save_file_image(c, self.get_collection_coverage_mimetype(c), query_res[c]))
+
+            else:
+                # Save to a JSON file and keep track
+                files.append(ExtractNRCanProcessor._save_file_json(c, query_res[c]))
 
             # Get the metadata xml for the collection
             metadata_xml = ExtractNRCanProcessor.get_metadata_xml_from_coll_conf(self.processor_def['settings']['catalogue_url'],
@@ -223,6 +230,11 @@ class ExtractNRCanProcessor(ExtractProcessor):
         project = pyproj.Transformer.from_crs('EPSG:' + str(geom_crs), 'EPSG:3978')
         shapely_geom = shapely.ops.transform(project.transform, shapely_geom)
 
+        # If the shape is invalid
+        if not shapely_geom.is_valid:
+            # Use a shapely trick to try to untwist the polygon https://shapely.readthedocs.io/en/stable/manual.html#object.buffer
+            shapely_geom = shapely_geom.buffer(0)
+
         # Return the area
         return shapely_geom.area
 
@@ -235,7 +247,6 @@ class ExtractNRCanProcessor(ExtractProcessor):
         try:
             # Find the metadata uuid from the link
             metadata_uuid = ExtractNRCanProcessor.get_metadata_from_links(coll_conf['links'])
-            print(metadata_uuid)
 
             # If read from config
             if metadata_uuid:
@@ -275,6 +286,18 @@ class ExtractNRCanProcessor(ExtractProcessor):
             os.makedirs(f'./{EXTRACT_FOLDER}')
         with open(f'./{EXTRACT_FOLDER}/{file_name}', 'w', encoding='utf-8') as f:
             json.dump(query_res, f, indent=4)
+        return file_name
+
+    @staticmethod
+    def _save_file_image(coll_name: str, mimetype: str, query_res):
+        """
+        Saves the given query_res in a geojson file in the EXTRACT_FOLDER
+        """
+        file_name = f"{coll_name}{guess_extension(mimetype)}"
+        if not os.path.exists(f'./{EXTRACT_FOLDER}'):
+            os.makedirs(f'./{EXTRACT_FOLDER}')
+        with open(f'./{EXTRACT_FOLDER}/{file_name}', 'wb') as f:
+            f.write(query_res)
         return file_name
 
     @staticmethod

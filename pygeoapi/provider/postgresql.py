@@ -52,7 +52,7 @@ import logging
 
 from copy import deepcopy
 from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
-from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_PolygonFromText, ST_Intersection
+from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_PolygonFromText, ST_Intersection, ST_MakeValid
 from geoalchemy2.shape import to_shape
 from pygeofilter.backends.sqlalchemy.evaluate import to_filter
 import pyproj
@@ -165,7 +165,7 @@ class PostgreSQLProvider(BaseProvider):
         # Execute query within self-closing database Session context
         with Session(self._engine) as session:
             if clip and geom_wkt:
-                results = (session.query(self.table_model, ST_Intersection(getattr(self.table_model, self.geom), ST_PolygonFromText(geom_wkt, geom_crs)).label('inters'))
+                results = (session.query(self.table_model, ST_Intersection(getattr(self.table_model, self.geom), ST_Transform(ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs)), self.srid)).label('inters'))
                            .filter(property_filters)
                            .filter(cql_filters)
                            .filter(spat_filter)
@@ -480,7 +480,7 @@ class PostgreSQLProvider(BaseProvider):
             # If a geom_crs is specified
             if geom_crs:
                 # Make the polygon from wkt
-                query_shape = ST_PolygonFromText(geom_wkt, geom_crs)
+                query_shape = ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs))
 
                 # Project the geometry to the SRID of the table
                 query_shape = ST_Transform(query_shape, self.srid)

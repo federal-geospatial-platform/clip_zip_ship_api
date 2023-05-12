@@ -807,7 +807,8 @@ class API:
         self.config['resources'] = self.on_load_resources(
             self.config['resources'])
         # Copy over for the template config (this is something that got added after a rebase of pending PR.. to be investigated..)
-        self.tpl_config['resources'] = self.config['resources']
+        self.tpl_config['resources'] = deepcopy(self.config['resources'])
+        self.tpl_config['server']['url'] = self.base_url # Same as in the __init__. This new tpl_config needs refactoring!
 
     def on_load_resources(self, resources):
         """
