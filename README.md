@@ -1,4 +1,4 @@
-# pygeoapi
+# Clip Zip Ship API (forked from [pygeoapi](https://github.com/geopython/pygeoapi))
 
 [![Build](https://github.com/geopython/pygeoapi/actions/workflows/main.yml/badge.svg)](https://github.com/geopython/pygeoapi/actions/workflows/main.yml)
 [![Docker](https://github.com/geopython/pygeoapi/actions/workflows/containers.yml/badge.svg)](https://github.com/geopython/pygeoapi/actions/workflows/containers.yml)
