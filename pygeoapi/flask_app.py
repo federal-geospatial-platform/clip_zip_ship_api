@@ -150,16 +150,6 @@ def reload_resources():
     return get_response(api_.reload_resources(request))
 
 
-@BLUEPRINT.route('/reload_stac')
-def reload_stac():
-    """
-    Endpoint to manually trigger a reload of the STAC
-
-    :returns: HTTP response
-    """
-    return get_response(api_.reload_stac(request))
-
-
 @BLUEPRINT.route('/conformance')
 def conformance():
     """

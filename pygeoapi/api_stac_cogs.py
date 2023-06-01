@@ -1,3 +1,6 @@
+######
+###### OLD CODE, NOT USED ANYMORE, KEPT FOR HISTORY ######
+######
 import sys, os, json, requests, psycopg2
 from dateutil.parser import parse
 from urllib.parse import urlparse

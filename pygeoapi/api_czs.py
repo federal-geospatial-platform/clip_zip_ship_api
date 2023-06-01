@@ -159,6 +159,17 @@ class API_CZS(API):
             else:
                 active_coll['parent'] = input_coll['parent']
 
+        if 'parent_title' in input_coll:
+            if isinstance(input_coll['parent_title'], dict):
+                # Depending on the language
+                #active_coll['parent_id'] = input_coll['parent']['id']
+                active_coll['parent_title'] = input_coll['parent_title']['en']
+                if str(locale) == 'fr_CA':
+                    active_coll['parent_title'] = input_coll['parent_title']['fr']
+
+            else:
+                active_coll['parent_title'] = input_coll['parent_title']
+
         if 'short_name' in input_coll:
             active_coll['short_name'] = input_coll['short_name']
         if 'org_schema' in input_coll:
@@ -183,53 +194,6 @@ class API_CZS(API):
 
         # Reinitialize the configuration
         self.load_resources()
-
-        return headers, HTTPStatus.OK, to_json({"reloaded": True}, self.pretty_print)
-
-
-    @pre_process
-    @jsonldify
-    def reload_stac(self, request: Union[APIRequest, Any]) -> Tuple[dict, int, str]:
-        """
-        Reloads the rasterio information in the database.
-
-        :param request: A request object
-        :returns: tuple of headers, status code, content
-        """
-
-        headers = request.get_response_headers()
-
-        uuids = ['f129611d-7ca1-418b-8390-ebac5adf958e',
-                 'f498bb69-3982-4b62-94db-4c0e0065bc17',
-                 '03ccfb5c-a06e-43e3-80fd-09d4f8f69703',
-                 '230f1f6d-353e-4d02-800b-368f4c48dc86',
-                 '37745ea7-d0cf-4ef6-b6b8-1cb3a7fce0b8',
-                 '0fe65119-e96e-4a57-8bfe-9d9245fba06b',
-                 'd8627209-bda2-436f-b22b-0eb19fdc6660',
-                 '7f245e4d-76c2-4caa-951a-45d1d2051333',
-                 '62de5952-a5eb-4859-b086-22a8ba8024b8',
-                 '768570f8-5761-498a-bd6a-315eb6cc023d',
-                 'b352a71a-011e-4a8e-b97c-77eae5ed3226',
-                 '4e8e3c6a-c961-4def-bdc7-f24823462818',
-                 '93d94cac-05d2-4ea0-82e1-3ff8500ebf93']
-        #uuids = ['f129611d-7ca1-418b-8390-ebac5adf958e']
-        #uuids = ['0fe65119-e96e-4a57-8bfe-9d9245fba06b']
-
-        # Open connection
-        with open_conn(self.config["settings"]["database"]) as conn:
-            # Delete all coverage/rasterio information
-            api_stac_cogs.flush_rasterio(conn)
-
-            # Add the uuids
-            api_stac_cogs.add_rasterio(conn,
-                self.config["settings"]["catalogue_url"],
-                self.config["settings"]["datacube_url"],
-                self.config["settings"]["metadata_url"],
-                self.config["settings"]["projection_default"],
-                uuids)
-
-            # Done
-            conn.commit()
 
         return headers, HTTPStatus.OK, to_json({"reloaded": True}, self.pretty_print)
 

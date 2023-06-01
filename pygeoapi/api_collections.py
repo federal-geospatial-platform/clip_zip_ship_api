@@ -14,6 +14,9 @@ postgres_template=\
     parent:
         en: null
         fr: null
+    parent_title:
+        en: null
+        fr: null
     theme:
         en: null
         fr: null
@@ -63,6 +66,9 @@ rasterio_template =\
         en: null
         fr: null
     parent:
+        en: null
+        fr: null
+    parent_title:
         en: null
         fr: null
     theme:
@@ -134,6 +140,8 @@ def load_template_common(itemvalue, template, data):
     itemvalue["title"]["fr"] = data["collection_title_fr"]
     itemvalue["parent"]["en"] = data["collection_parent_en"]
     itemvalue["parent"]["fr"] = data["collection_parent_fr"]
+    itemvalue["parent_title"]["en"] = data["collection_parent_title_en"]
+    itemvalue["parent_title"]["fr"] = data["collection_parent_title_fr"]
     itemvalue["theme"]["en"] = data["collection_theme_en"]
     itemvalue["theme"]["fr"] = data["collection_theme_fr"]
     itemvalue["short_name"] = data["collection_short_name"]
