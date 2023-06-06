@@ -14,7 +14,7 @@ jobs:
           # git config --global user.name 'Alex-NRCan'
           # git config --global user.email 'alexandre.roy@nrcan-rncan.gc.ca'
 
-          # git remote add upstream https://github.com/example/test.git
+          git remote add upstream https://github.com/geopython/pygeoapi.git
           git fetch upstream
 
           # "git checkout master" is unnecessary, already here by default
