@@ -27,3 +27,21 @@ jobs:
           git checkout develop
           git merge --no-edit upstream/master
           git push
+      - name: Check if failed
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          # mail server settings
+          server_address: ${{ secrets.EMAIL_HOST }}
+          server_port: ${{ secrets.EMAIL_PORT }}
+          # user credentials
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          # email subject
+          subject: ${{ github.job }} job of ${{ github.repository }} has ${{ job.status }}
+          # email body as text
+          body: ${{ github.job }} job in worflow ${{ github.workflow }} of ${{ github.repository }} has ${{ job.status }}
+          # comma-separated string, send email to
+          to: alexandre.roy@nrcan-rncan.gc.ca
+          # from email name
+          from: John Doe
