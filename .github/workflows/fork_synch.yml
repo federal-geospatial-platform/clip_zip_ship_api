@@ -26,4 +26,4 @@ jobs:
           # Synch/Merge
           git checkout develop
           git merge --no-edit upstream/master
-          git push origin master
+          git push
