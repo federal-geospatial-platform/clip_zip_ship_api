@@ -3860,7 +3860,8 @@ class API:
 
         try:
             execution_mode = RequestedProcessExecutionMode(
-                request.headers.get('Prefer'))
+                request.headers.get('Prefer', request.headers.get('prefer'))
+            )
         except ValueError:
             execution_mode = None
         try:
