@@ -202,7 +202,7 @@ class ExtractProcessor(BaseProcessor):
         # If the collection has a provider of type feature
         if c_type == "feature":
             # Query using the provider logic and clip = True!
-            res = p.query(offset=0, limit=10,
+            res = p.query(offset=0, limit=1000000000,
                           resulttype='results', bbox=None,
                           bbox_crs=None, geom_wkt=geom_wkt, geom_crs=geom_crs,
                           datetime_=None, properties=[],

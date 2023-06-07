@@ -686,7 +686,7 @@ class APIRequest:
         bbox = self.read_bbox(method)
 
         # Read the bbox crs if any
-        bbox_crs = self.read_param(method, 'bbox-crs') or 4326
+        bbox_crs = self.read_param(method, 'bbox-crs')
 
         return bbox, bbox_crs
 
@@ -709,7 +709,7 @@ class APIRequest:
         geom = self.read_param(method, 'geom')
 
         # Read the geometry crs if any
-        geom_crs = self.read_param(method, 'geom-crs') or 4326
+        geom_crs = self.read_param(method, 'geom-crs')
 
         # If no geom_wkt
         bbox = None
@@ -1689,8 +1689,8 @@ class API:
         LOGGER.debug('Processing limit parameter')
         try:
             limit = int(request.params.get('limit'))
-            # TODO: We should do more validation, against the min and max
-            #       allowed by the server configuration
+            if limit and limit > int(self.config['server']['limit']):
+                limit = int(self.config['server']['limit'])
             if limit <= 0:
                 msg = 'limit value should be strictly positive'
                 return self.get_exception(
@@ -2139,8 +2139,8 @@ class API:
         LOGGER.debug('Processing limit parameter')
         try:
             limit = int(request.params.get('limit'))
-            # TODO: We should do more validation, against the min and max
-            # allowed by the server configuration
+            if limit and limit > int(self.config['server']['limit']):
+                limit = int(self.config['server']['limit'])
             if limit <= 0:
                 msg = 'limit value should be strictly positive'
                 return self.get_exception(
