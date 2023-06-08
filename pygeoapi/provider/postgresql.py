@@ -164,6 +164,13 @@ class PostgreSQLProvider(BaseProvider):
 
         # Execute query within self-closing database Session context
         with Session(self._engine) as session:
+            if geom_wkt:
+                ##### NRCAN START
+                # If there's a geometry for the request, limit can be infinite
+                if geom:
+                    limit = 1000000000
+                ##### NRCAN END
+
             if clip and geom_wkt:
                 results = (session.query(self.table_model, ST_Intersection(getattr(self.table_model, self.geom), ST_Transform(ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs)), self.srid)).label('inters'))
                            .filter(property_filters)
