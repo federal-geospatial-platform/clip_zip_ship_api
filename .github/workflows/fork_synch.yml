@@ -3,7 +3,7 @@ on:
   schedule:
      # actually, ~5 minutes is the highest
      # effective frequency you will get
-    - cron:  '* */1 * * *'
+    - cron:  '0 */2 * * *'
 jobs:
   merge:
     runs-on: ubuntu-latest
@@ -26,4 +26,23 @@ jobs:
           # Synch/Merge
           git checkout develop
           git merge --no-edit upstream/master
-          git push origin master
+          git push
+
+#      - name: Check if failed
+#        if: failed()
+#        uses: dawidd6/action-send-mail@v3
+#        with:
+#          # mail server settings
+#          server_address: ${{ secrets.EMAIL_HOST }}
+#          server_port: ${{ secrets.EMAIL_PORT }}
+#          # user credentials
+#          username: ${{ secrets.EMAIL_USERNAME }}
+#          password: ${{ secrets.EMAIL_PASSWORD }}
+#          # email subject
+#          subject: ${{ github.job }} job of ${{ github.repository }} has ${{ job.status }}
+#          # email body as text
+#          body: ${{ github.job }} job in worflow ${{ github.workflow }} of ${{ github.repository }} has ${{ job.status }}
+#          # comma-separated string, send email to
+#          to: alexandre.roy@nrcan-rncan.gc.ca
+#          # from email name
+#          from: John Doe
