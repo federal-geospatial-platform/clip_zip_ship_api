@@ -144,14 +144,14 @@ class ExtractProcessor(BaseProcessor):
         c_conf = self.processor_def['collections'][coll_name]
 
         # Get the collection type by its providers
-        return ExtractProcessor._get_collection_type_from_providers(c_conf['providers'])
+        return self._get_collection_type_from_providers(c_conf['providers'])
 
     def get_collection_coverage_mimetype(self, coll_name: str):
         # Read the configuration for it
         c_conf = self.processor_def['collections'][coll_name]
 
         # Get the collection type by its providers
-        return ExtractProcessor._get_collection_mimetype_image_from_providers(c_conf['providers'])
+        return self._get_collection_mimetype_image_from_providers(c_conf['providers'])
 
     def execute(self, data):
         """
@@ -191,7 +191,7 @@ class ExtractProcessor(BaseProcessor):
         c_conf = self.processor_def['collections'][coll_name]
 
         # Get the collection type by its providers
-        c_type = ExtractProcessor._get_collection_type_from_providers(c_conf['providers'])
+        c_type = self._get_collection_type_from_providers(c_conf['providers'])
 
         # Get the provider by type
         provider_def = get_provider_by_type(c_conf['providers'], c_type)
@@ -202,7 +202,7 @@ class ExtractProcessor(BaseProcessor):
         # If the collection has a provider of type feature
         if c_type == "feature":
             # Query using the provider logic and clip = True!
-            res = p.query(offset=0, limit=1000000000,
+            res = p.query(offset=0, limit=self.processor_def['server']['limit'],
                           resulttype='results', bbox=None,
                           bbox_crs=None, geom_wkt=geom_wkt, geom_crs=geom_crs,
                           datetime_=None, properties=[],

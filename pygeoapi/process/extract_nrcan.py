@@ -36,7 +36,7 @@ from pygeoapi.process.extract import ExtractProcessor
 from pygeoapi import api_aws
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
 from pygeoapi.provider.base import ProviderPreconditionFailed, ProviderRequestEntityTooLargeError
-from pygeoapi.util import (get_provider_by_type, to_json)
+from pygeoapi.util import get_provider_by_type, to_json, get_area_from_wkt_in_km2
 from pygeoapi.plugin import load_plugin
 
 
@@ -142,7 +142,6 @@ class ExtractNRCanProcessor(ExtractProcessor):
         """
 
         super().__init__(processor_def, PROCESS_METADATA)
-        self.max_extraction_area = 1000 * (1000 * 1000) # 1000 km2
 
     def on_query_validate_execution(self, geom: str, geom_crs: int, colls: list):
         """
@@ -153,20 +152,25 @@ class ExtractNRCanProcessor(ExtractProcessor):
             LOGGER.warning(msg)
             raise ProviderPreconditionFailed(msg)
 
-        # Read all collection information
-        # collections = [self.processor_def['collections'][coll_name] for coll_name in colls]
-
-        # Get list of collecitons of type coverage
-        # collections_cov = list(filter(lambda c: c['providers'][0]['type'] == "coverage", collections))
-
         # Get the area of the geometry
-        area = ExtractNRCanProcessor.get_area_from_wkt(geom, geom_crs)
+        area = get_area_from_wkt_in_km2(geom, geom_crs)
 
-        # If the area is over the maximum
-        if area > self.max_extraction_area:
-            msg = f'clipping area was {area / 1000000} km2 which is over {self.max_extraction_area / 1000000} km2'
-            LOGGER.warning(msg)
-            raise ProviderRequestEntityTooLargeError(msg)
+        # For each collection to extract
+        for coll_name in colls:
+            # Read collection config
+            c = self.processor_def['collections'][coll_name]
+
+            # Read the max area
+            max_area = c['providers'][0]['max_area']
+
+            # If the area is over the maximum for the collection
+            if area > max_area:
+                msg = f'clipping area was {area} km2 which is over {max_area} km2 for collection: {coll_name}'
+                LOGGER.warning(msg)
+                raise ProviderRequestEntityTooLargeError(msg)
+
+        # Get list of collections of type coverage
+        # collections_cov = list(filter(lambda c: c['providers'][0]['type'] == "coverage", collections))
 
         # All good
         return True
@@ -189,25 +193,25 @@ class ExtractNRCanProcessor(ExtractProcessor):
             # Depending on the type
             if self.get_collection_type(c) == "coverage":
                 # Save coverage image and keep track
-                files.append(ExtractNRCanProcessor._save_file_image(c, self.get_collection_coverage_mimetype(c), query_res[c]))
+                files.append(self._save_file_image(c, self.get_collection_coverage_mimetype(c), query_res[c]))
 
             else:
                 # Save to a JSON file and keep track
-                files.append(ExtractNRCanProcessor._save_file_json(c, query_res[c]))
+                files.append(self._save_file_json(c, query_res[c]))
 
             # Get the metadata xml for the collection
-            metadata_xml = ExtractNRCanProcessor.get_metadata_xml_from_coll_conf(self.processor_def['settings']['catalogue_url'],
-                                                                                 self.processor_def['collections'][c])
+            metadata_xml = self.get_metadata_xml_from_coll_conf(self.processor_def['settings']['catalogue_url'],
+                                                                self.processor_def['collections'][c])
 
             # If found
             if metadata_xml:
-                files.append(ExtractNRCanProcessor._save_file_xml(c, metadata_xml))
+                files.append(self._save_file_xml(c, metadata_xml))
 
         # Destination zip file path and name
         dest_zip = f'./{uuid.uuid4()}.zip'
 
         # Save all files to a zip file
-        zip_file = ExtractNRCanProcessor._zip_file(files, dest_zip)
+        zip_file = self._zip_file(files, dest_zip)
 
         # Put the zip file in S3
         api_aws.connect_s3_send_file(f"./{EXTRACT_FOLDER}/{dest_zip}",
@@ -217,26 +221,9 @@ class ExtractNRCanProcessor(ExtractProcessor):
                                      dest_zip)
 
         # Send email
-        ExtractNRCanProcessor.send_email(self.processor_def['settings']['email'], email,
-                                         f"{self.processor_def['settings']['extract_url']}{os.path.basename(dest_zip)}", [], [],
-                                         None)
-
-    @staticmethod
-    def get_area_from_wkt(geom_wkt: str, geom_crs: int):
-        # Load the geom from wkt using shapely
-        shapely_geom = shapely.wkt.loads(geom_wkt)
-
-        # Project it to 3978 for meters
-        project = pyproj.Transformer.from_crs('EPSG:' + str(geom_crs), 'EPSG:3978')
-        shapely_geom = shapely.ops.transform(project.transform, shapely_geom)
-
-        # If the shape is invalid
-        if not shapely_geom.is_valid:
-            # Use a shapely trick to try to untwist the polygon https://shapely.readthedocs.io/en/stable/manual.html#object.buffer
-            shapely_geom = shapely_geom.buffer(0)
-
-        # Return the area
-        return shapely_geom.area
+        self.send_email(self.processor_def['settings']['email'], email,
+                        f"{self.processor_def['settings']['extract_url']}{os.path.basename(dest_zip)}", [], [],
+                        None)
 
     @staticmethod
     def get_metadata_xml_from_coll_conf(catalog_url: str, coll_conf: dict):

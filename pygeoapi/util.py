@@ -47,6 +47,7 @@ from urllib.parse import urlparse
 from urllib.request import urlopen
 
 import dateutil.parser
+import shapely
 import shapely.ops
 from shapely.geometry import (
     GeometryCollection,
@@ -685,6 +686,23 @@ def get_crs_from_uri(uri: str) -> pyproj.CRS:
         raise CRSError(msg)
     else:
         return crs
+
+
+def get_area_from_wkt_in_km2(geom_wkt: str, geom_crs: int):
+    # Load the geom from wkt using shapely
+    shapely_geom = shapely.wkt.loads(geom_wkt)
+
+    # Project it to 3978 for meters
+    project = pyproj.Transformer.from_crs('EPSG:' + str(geom_crs), 'EPSG:3978')
+    shapely_geom = shapely.ops.transform(project.transform, shapely_geom)
+
+    # If the shape is invalid
+    if not shapely_geom.is_valid:
+        # Use a shapely trick to try to untwist the polygon https://shapely.readthedocs.io/en/stable/manual.html#object.buffer
+        shapely_geom = shapely_geom.buffer(0)
+
+    # Return the area
+    return shapely_geom.area / 1000000
 
 
 def get_transform_from_crs(

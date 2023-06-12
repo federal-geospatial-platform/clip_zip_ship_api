@@ -80,6 +80,7 @@ class API_CZS(API):
             'type': 'process',
             'processor': {
                 'name': 'pygeoapi.process.extract_nrcan.ExtractNRCanProcessor',
+                'server': self.config["server"],
                 'collections': deepcopy(the_resources),
                 'settings': deepcopy(self.config["settings"])
             }
@@ -172,12 +173,18 @@ class API_CZS(API):
 
         if 'short_name' in input_coll:
             active_coll['short_name'] = input_coll['short_name']
+
         if 'org_schema' in input_coll:
             active_coll['org_schema'] = input_coll['org_schema']
+
         if 'wkt' in input_coll:
             active_coll['wkt'] = input_coll['wkt']
+
         if 'providers' in input_coll and 'crs' in input_coll["providers"][0]:
             active_coll['crs'] = input_coll["providers"][0]["crs"]
+
+        if 'providers' in input_coll and 'max_area' in input_coll["providers"][0]:
+            active_coll['max_area'] = input_coll["providers"][0]['max_area']
 
 
     @pre_process
