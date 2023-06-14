@@ -298,6 +298,7 @@ def get_collection_tiles(collection_id=None):
         request, collection_id))
 
 
+@BLUEPRINT.route('/collections/<path:collection_id>/tiles/<tileMatrixSetId>')
 @BLUEPRINT.route('/collections/<path:collection_id>/tiles/<tileMatrixSetId>/metadata')  # noqa
 def get_collection_tiles_metadata(collection_id=None, tileMatrixSetId=None):
     """
@@ -336,8 +337,10 @@ def get_collection_tiles_data(collection_id=None, tileMatrixSetId=None,
 def collection_map(collection_id, style_id=None):
     """
     OGC API - Maps map render endpoint
+
     :param collection_id: collection identifier
     :param style_id: style identifier
+
     :returns: HTTP response
     """
 
@@ -436,7 +439,7 @@ def get_job_result_resource(job_id, resource):
 @BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/position')  # noqa
 @BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/area')  # noqa
 @BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/cube')  # noqa
-@BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/radius') # noqa
+@BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/radius')  # noqa
 @BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/trajectory')  # noqa
 @BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/corridor')  # noqa
 def get_collection_edr_query(collection_id, instance_id=None):
