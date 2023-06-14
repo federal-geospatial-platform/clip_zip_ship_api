@@ -28,7 +28,7 @@
 #
 # =================================================================
 
-""" Flask module providing the route paths to the api"""
+"""Flask module providing the route paths to the api"""
 
 import os
 
@@ -37,10 +37,8 @@ import click
 from flask import Flask, Blueprint, make_response, request, send_from_directory
 
 from pygeoapi.api_czs import API_CZS
-from pygeoapi.util import get_mimetype, yaml_load
+from pygeoapi.util import get_mimetype, yaml_load, get_api_rules
 
-
-CONFIG = None
 
 if 'PYGEOAPI_CONFIG' not in os.environ:
     raise RuntimeError('PYGEOAPI_CONFIG environment variable not set')
@@ -48,26 +46,36 @@ if 'PYGEOAPI_CONFIG' not in os.environ:
 with open(os.environ.get('PYGEOAPI_CONFIG'), encoding='utf8') as fh:
     CONFIG = yaml_load(fh)
 
+API_RULES = get_api_rules(CONFIG)
+
 STATIC_FOLDER = 'static'
 if 'templates' in CONFIG['server']:
     STATIC_FOLDER = CONFIG['server']['templates'].get('static', 'static')
 
 APP = Flask(__name__, static_folder=STATIC_FOLDER, static_url_path='/static')
-APP.url_map.strict_slashes = False
+APP.url_map.strict_slashes = API_RULES.strict_slashes
 
-BLUEPRINT = Blueprint('pygeoapi', __name__, static_folder=STATIC_FOLDER)
+BLUEPRINT = Blueprint(
+    'pygeoapi',
+    __name__,
+    static_folder=STATIC_FOLDER,
+    url_prefix=API_RULES.get_url_prefix('flask')
+)
 
 # CORS: optionally enable from config.
 if CONFIG['server'].get('cors', False):
-    from flask_cors import CORS
-    CORS(APP)
+    try:
+        from flask_cors import CORS
+        CORS(APP)
+    except ModuleNotFoundError:
+        print('Python package flask-cors required for CORS support')
 
 APP.config['JSONIFY_PRETTYPRINT_REGULAR'] = CONFIG['server'].get(
     'pretty_print', True)
 
 api_ = API_CZS(CONFIG)
 
-OGC_SCHEMAS_LOCATION = CONFIG['server'].get('ogc_schemas_location', None)
+OGC_SCHEMAS_LOCATION = CONFIG['server'].get('ogc_schemas_location')
 
 if (OGC_SCHEMAS_LOCATION is not None and
         not OGC_SCHEMAS_LOCATION.startswith('http')):
@@ -218,9 +226,9 @@ def collection_items(collection_id, item_id=None):
                 else:
                     return get_response(
                         api_.post_collection_items(request, collection_id))
-            else:
-                return get_response(
-                        api_.post_collection_items(request, collection_id))
+        elif request.method == 'OPTIONS':
+            return get_response(
+                api_.manage_collection_item(request, 'options', collection_id))
 
     elif request.method == 'DELETE':
         return get_response(
@@ -229,6 +237,10 @@ def collection_items(collection_id, item_id=None):
     elif request.method == 'PUT':
         return get_response(
             api_.manage_collection_item(request, 'update',
+                                        collection_id, item_id))
+    elif request.method == 'OPTIONS':
+        return get_response(
+            api_.manage_collection_item(request, 'options',
                                         collection_id, item_id))
     else:
         return get_response(
@@ -319,6 +331,27 @@ def get_collection_tiles_data(collection_id=None, tileMatrixSetId=None,
         request, collection_id, tileMatrixSetId, tileMatrix, tileRow, tileCol))
 
 
+@BLUEPRINT.route('/collections/<collection_id>/map')
+@BLUEPRINT.route('/collections/<collection_id>/styles/<style_id>/map')
+def collection_map(collection_id, style_id=None):
+    """
+    OGC API - Maps map render endpoint
+    :param collection_id: collection identifier
+    :param style_id: style identifier
+    :returns: HTTP response
+    """
+
+    headers, status_code, content = api_.get_collection_map(
+        request, collection_id, style_id)
+
+    response = make_response(content, status_code)
+
+    if headers:
+        response.headers = headers
+
+    return response
+
+
 @BLUEPRINT.route('/processes')
 @BLUEPRINT.route('/processes/<process_id>')
 def get_processes(process_id=None):
@@ -397,11 +430,13 @@ def get_job_result_resource(job_id, resource):
 @BLUEPRINT.route('/collections/<path:collection_id>/position')
 @BLUEPRINT.route('/collections/<path:collection_id>/area')
 @BLUEPRINT.route('/collections/<path:collection_id>/cube')
+@BLUEPRINT.route('/collections/<path:collection_id>/radius')
 @BLUEPRINT.route('/collections/<path:collection_id>/trajectory')
 @BLUEPRINT.route('/collections/<path:collection_id>/corridor')
 @BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/position')  # noqa
 @BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/area')  # noqa
 @BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/cube')  # noqa
+@BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/radius') # noqa
 @BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/trajectory')  # noqa
 @BLUEPRINT.route('/collections/<path:collection_id>/instances/<instance_id>/corridor')  # noqa
 def get_collection_edr_query(collection_id, instance_id=None):

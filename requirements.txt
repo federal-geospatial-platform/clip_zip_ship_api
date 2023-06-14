@@ -1,8 +1,9 @@
 Babel
-boto3
+#click
 click>7,<=8
-emails
 Flask
+#importlib_metadata
+#jinja
 jinja2==3.0.3
 jsonschema
 pydantic
@@ -19,5 +20,7 @@ shapely==2.0.1
 SQLAlchemy<2.0.0
 psycopg2
 geoalchemy2
+boto3
+emails
 tinydb
-unicodecsv
+#unicodecsv

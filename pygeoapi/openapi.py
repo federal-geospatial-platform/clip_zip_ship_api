@@ -1211,7 +1211,7 @@ def get_oas_30(cfg):
             'get': {
                 'summary': 'Retrieve jobs list',
                 'description': 'Retrieve a list of jobs',
-                'tags': ['server'],
+                'tags': ['jobs'],
                 'operationId': 'getJobs',
                 'responses': {
                     '200': {'$ref': '#/components/responses/200'},
@@ -1225,7 +1225,7 @@ def get_oas_30(cfg):
             'get': {
                 'summary': 'Retrieve job details',
                 'description': 'Retrieve job details',
-                'tags': ['server'],
+                'tags': ['jobs'],
                 'parameters': [
                     name_in_path,
                     {'$ref': '#/components/parameters/f'}
@@ -1240,7 +1240,7 @@ def get_oas_30(cfg):
             'delete': {
                 'summary': 'Cancel / delete job',
                 'description': 'Cancel / delete job',
-                'tags': ['server'],
+                'tags': ['jobs'],
                 'parameters': [
                     name_in_path
                 ],
@@ -1257,7 +1257,7 @@ def get_oas_30(cfg):
             'get': {
                 'summary': 'Retrieve job results',
                 'description': 'Retrive job resiults',
-                'tags': ['server'],
+                'tags': ['jobs'],
                 'parameters': [
                     name_in_path,
                     {'$ref': '#/components/parameters/f'}
@@ -1270,6 +1270,12 @@ def get_oas_30(cfg):
                 }
             }
         }
+
+        tag = {
+            'name': 'jobs',
+            'description': 'Process jobs',
+        }
+        oas['tags'].insert(1, tag)
 
     oas['paths'] = paths
 
