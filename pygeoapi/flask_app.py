@@ -200,9 +200,11 @@ def collection_queryables(collection_id=None):
 
 
 @BLUEPRINT.route('/collections/<path:collection_id>/items',
-                 methods=['GET', 'POST'])
-@BLUEPRINT.route('/collections/<path:collection_id>/items/<item_id>',
-                 methods=['GET', 'PUT', 'DELETE'])
+                 methods=['GET', 'POST', 'OPTIONS'],
+                 provide_automatic_options=False)
+@BLUEPRINT.route('/collections/<path:collection_id>/items/<path:item_id>',
+                 methods=['GET', 'PUT', 'DELETE', 'OPTIONS'],
+                 provide_automatic_options=False)
 def collection_items(collection_id, item_id=None):
     """
     OGC API collections items endpoint
