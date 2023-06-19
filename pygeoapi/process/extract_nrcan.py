@@ -197,7 +197,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
             else:
                 # Save to a JSON file and keep track
-                files.append(self._save_file_json(c, query_res[c]))
+                files.append(self._save_file_geojson(c, query_res[c]))
 
             # Get the metadata xml for the collection
             metadata_xml = self.get_metadata_xml_from_coll_conf(self.processor_def['settings']['catalogue_url'],
@@ -263,12 +263,12 @@ class ExtractNRCanProcessor(ExtractProcessor):
         return None
 
     @staticmethod
-    def _save_file_json(coll_name: str, query_res: dict):
+    def _save_file_geojson(coll_name: str, query_res: dict):
         """
         Saves the given query_res in a geojson file in the EXTRACT_FOLDER
         """
 
-        file_name = f"{coll_name}.json"
+        file_name = f"{coll_name}.geojson"
         if not os.path.exists(f'./{EXTRACT_FOLDER}'):
             os.makedirs(f'./{EXTRACT_FOLDER}')
         with open(f'./{EXTRACT_FOLDER}/{file_name}', 'w', encoding='utf-8') as f:
