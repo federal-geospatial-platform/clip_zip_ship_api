@@ -847,7 +847,8 @@ class API:
         # By default, return the same collections object, unchanged.
         return collections
 
-    def on_build_collection_finalize(self, locale, collection_data_type,
+    def on_build_collection_finalize(self, locale, collections,
+                                     collection_data_type,
                                      input_coll, active_coll):
         """
         Overridable function to modify the collection information before
@@ -1488,6 +1489,7 @@ class API:
 
             # Finalize building the collection information
             self.on_build_collection_finalize(request.locale,
+                                              collections_dict,
                                               collection_data_type, v,
                                               collection)
 
