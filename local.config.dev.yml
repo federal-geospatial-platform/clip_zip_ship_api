@@ -1,0 +1,61 @@
+server:
+    bind:
+        host: 0.0.0.0
+        port: 5000
+    url: https://czs-pygeoapi.ddr-stage.services.geo.ca
+    mimetype: application/json; charset=UTF-8
+    encoding: utf-8
+    gzip: false
+    languages:
+    - en-US
+    - fr-CA
+    cors: false
+    pretty_print: true
+    limit: 500
+    map:
+        url: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+        attribution: <a href="https://wikimediafoundation.org/wiki/Maps_Terms_of_Use">Wikimedia
+            maps</a> | Map data &copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap
+            contributors</a>
+    ogc_schemas_location: http://schemas.opengis.net
+logging:
+    level: INFO
+metadata:
+    identification:
+        title: PyGeoAPI for NRCan collections
+        description: NRCan's implementation of the PyGeoAPI to provide an API to NRCan's
+            geospatial data
+        keywords:
+        - geospatial
+        - data
+        - api
+        keywords_type: theme
+        terms_of_service: https://creativecommons.org/licenses/by/4.0/
+        url: https://github.com/geopython/pygeoapi
+    license:
+        name: CC-BY 4.0 license
+        url: https://creativecommons.org/licenses/by/4.0/
+    provider:
+        name: pygeoapi Development Team
+        url: https://pygeoapi.io
+    contact:
+        name: Roy, Alexandre
+        position: Lead Dev
+        address: Mailing Address
+        city: City
+        stateorprovince: Administrative Area
+        postalcode: Zip or Postal Code
+        country: Canada
+        phone: +xx-xxx-xxx-xxxx
+        fax: +xx-xxx-xxx-xxxx
+        email: alexandre.roy@nrcan-nrcan.gc.ca
+        url: Contact URL
+        hours: Hours of Service
+        instructions: During hours of service. Off on weekends.
+        role: pointOfContact
+
+settings:
+    extract_url: http://ftp.ftp-staging.services.geo.ca/pub/czs/
+    catalogue_url: https://maps.canada.ca/geonetwork/srv/eng/csw?request=GetRecordById&service=CSW&version=2.0.2&elementSetName=full&outputSchema=http://www.isotc211.org/2005/gmd&typeNames=gmd:MD_Metadata&constraintLanguage=FILTER&id={metadata_uuid}
+
+resources:
