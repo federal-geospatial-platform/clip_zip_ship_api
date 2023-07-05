@@ -11,16 +11,13 @@
     - fr-CA
     cors: true
     pretty_print: true
-    limit: 50
+    limit: 500
     map:
         url: https://tile.openstreetmap.org/{z}/{x}/{y}.png
-        url_: https://maps-cartes.services.geo.ca/server2_serveur2/rest/services/BaseMaps/CBME_CBCE_HS_RO_3978/MapServer/tile/{z}/{y}/{x}
         attribution: <a href="https://wikimediafoundation.org/wiki/Maps_Terms_of_Use">Wikimedia
             maps</a> | Map data &copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap
             contributors</a>
     ogc_schemas_location: http://schemas.opengis.net
-    #templates:
-    #    path: C:\Users\alexandre.roy\Anaconda3\envs\.env-pygeoapi-core3\Lib\site-packages\pygeoapi-0.13.dev0-py3.9.egg\pygeoapi\templates
 
     manager:  # optional OGC API - Processes asynchronous job management
         name: TinyDB  # plugin name (see pygeoapi.plugin for supported process_manager's)
@@ -57,7 +54,7 @@ metadata:
         country: Canada
         phone: +xx-xxx-xxx-xxxx
         fax: +xx-xxx-xxx-xxxx
-        email: you@example.org
+        email: alexandre.roy@nrcan-nrcan.gc.ca
         url: Contact URL
         hours: Hours of Service
         instructions: During hours of service. Off on weekends.
@@ -66,7 +63,7 @@ metadata:
 settings:
     extract_url: http://ftp.ftp-staging.services.geo.ca/pub/czs/
     catalogue_url: https://maps.canada.ca/geonetwork/srv/eng/csw?request=GetRecordById&service=CSW&version=2.0.2&elementSetName=full&outputSchema=http://www.isotc211.org/2005/gmd&typeNames=gmd:MD_Metadata&constraintLanguage=FILTER&id={metadata_uuid}
-
+    secret_aws_key: /stage/cdtk_api_pygeoapi
 
 resources:
     obs:

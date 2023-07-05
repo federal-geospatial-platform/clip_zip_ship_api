@@ -41,7 +41,7 @@ class API_CZS(API):
         """
 
         # Reads the AWS Secrets manager to retrieve sensitive parameters
-        aws_secrets = api_aws.get_secret("ca-central-1", "secretsmanager", "/stage/cdtk_api_pygeoapi")
+        aws_secrets = api_aws.get_secret("ca-central-1", "secretsmanager", self.config["settings"]["secret_aws_key"])
         self.config["settings"]["database"] = aws_secrets["database"]
         self.config["settings"]["email"] = aws_secrets["email"]
         self.config["settings"]["s3"] = aws_secrets["s3"]

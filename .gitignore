@@ -123,3 +123,5 @@ examples/django/sample_project/db.sqlite3
 .pre-commit-config.yaml
 
 /extractions
+/jobs/pygeoapi-process-manager.db
+/jobs
