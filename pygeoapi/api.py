@@ -786,9 +786,6 @@ class API:
         self.tpl_config = deepcopy(self.config)
         self.tpl_config['server']['url'] = self.base_url
 
-        self.manager = get_manager(self.config)
-        LOGGER.info('Process manager plugin loaded')
-
         # Now that basic configuration is read, call the load ressources.
         # This call enables the api engine to load resources dynamically.
         # That is, resources which could be coming from other sources than
@@ -798,6 +795,10 @@ class API:
         # That way, it's a little easier to manage a dynamic ensemble of
         # resoures, especially on pygeoapi distributed environments.
         self.load_resources()
+
+        # Now load the possible manager(s)
+        self.manager = get_manager(self.config)
+        LOGGER.info('Process manager plugin loaded')
 
     def load_resources(self):
         """
@@ -3876,6 +3877,15 @@ class API:
             )
         except ValueError:
             execution_mode = None
+
+        ### NRCAN STUFF BECAUSE WE ARE FORCING ASYNC FOR EXTRACT PROCESS
+        try:
+            if 'extract' in self.config['resources']:
+                execution_mode = RequestedProcessExecutionMode('respond-async')
+        except:
+            execution_mode = None
+        ### END NRCAN STUFF
+
         try:
             LOGGER.debug('Executing process')
             result = self.manager.execute_process(

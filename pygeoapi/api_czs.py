@@ -27,6 +27,7 @@ class API_CZS(API):
         """
         Initialize object
         """
+        self.secret_aws_keys = {}
         super().__init__(config)
 
 
@@ -58,13 +59,34 @@ class API_CZS(API):
 
                 # If not already loaded
                 if not d["collection_name"] in the_resources:
+                    # Get the template
                     thisTemplate = api_collections.tableTemplateDict[d['provider_type']]
 
                     # Depending on the feature
                     if d['provider_type'] == "feature":
-                        providerDict = api_collections.load_template_postgres(thisTemplate, d)
+                        # Check if we've fetched this secret aws key before
+                        sec_key = d['data_secret_aws_key']
+                        if not sec_key in self.secret_aws_keys:
+                            # Fetch the secret value
+                            sec_val = api_aws.get_secret("ca-central-1", "secretsmanager", sec_key)
+
+                            # Store it
+                            self.secret_aws_keys[sec_key] = {
+                                'data_host': sec_val['host'],
+                                'data_port': sec_val['port'],
+                                'data_dbname': sec_val['dbname'],
+                                'data_user': sec_val['user'],
+                                'data_password': sec_val['password'],
+                            }
+
+                        # Combine the data
+                        d2 = {**d, **self.secret_aws_keys[sec_key]}
+
+                        # Load template for Postgres
+                        providerDict = api_collections.load_template_postgres(thisTemplate, d2)
 
                     elif d['provider_type'] == "coverage":
+                        # Load template for Coverage
                         providerDict = api_collections.load_template_rasterio(thisTemplate, d)
 
                     # If loading anything
@@ -102,7 +124,7 @@ class API_CZS(API):
         """
 
         # print("on_description_filter_spatially: filtering?=" + ('true' if geom_wkt else 'false'))
-        print("Count before: " + str(len(collections)))
+        #print("Count before: " + str(len(collections)))
 
         # If filtering spatially using a wkt
         if geom_wkt:
@@ -121,7 +143,7 @@ class API_CZS(API):
                 collections = collections_filtered
 
         # Return the filtered collections list
-        print("Count after: " + str(len(collections)))
+        #print("Count after: " + str(len(collections)))
         return collections
 
 

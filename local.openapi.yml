@@ -318,19 +318,21 @@ components:
               items:
                 type: string
               example:
-              - major_projects___major_projects_inventory_point
-              - major_projects___major_projects_inventory_line
-              - cdem_mpi__cdem
+              - gsc_seismic_ref__hudson-james-ungava-bays
+              - gsc_surficial_g__surficial-geology-boundaries
+            email:
+              type: string
+              example: alexandre.roy@nrcan-rncan.gc.ca
             geom:
               type: string
-              example: POLYGON((-72.3061 45.3656, -72.3061 45.9375, -71.7477 45.9375, -71.7477 45.3656, -72.3061 45.3656))
+              example: POLYGON((15287 1143694,75187 1146778,67764 1119560,15287 1143694))
             geom_smaller:
               type: string
               example: POLYGON((-71.8477 45.3656, -71.8477 45.3666, -71.8466 45.3666, -71.8466 45.3656, -71.8477 45.3656))
             geom_crs:
               type: number
               format: integer
-              example: 4326
+              example: 3978
 info:
   contact:
     email: you@example.org
