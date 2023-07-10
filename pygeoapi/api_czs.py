@@ -103,8 +103,8 @@ class API_CZS(API):
             'processor': {
                 'name': 'pygeoapi.process.extract_nrcan.ExtractNRCanProcessor',
                 'server': self.config["server"],
-                'collections': deepcopy(the_resources),
-                'settings': deepcopy(self.config["settings"])
+                'settings': deepcopy(self.config["settings"]),
+                'collections': deepcopy(the_resources)
             }
         }
 

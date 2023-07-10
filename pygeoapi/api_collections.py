@@ -29,6 +29,7 @@ postgres_template=\
     keywords:
         en: null
         fr: null
+    wkt: null
     links:
     -   type: null
         rel: null

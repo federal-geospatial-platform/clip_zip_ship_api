@@ -1031,6 +1031,64 @@ paths:
       summary: Process Extract execution
       tags:
       - process
+  /jobs:
+    get:
+      summary: Gets all Jobs
+      description: Gets all Jobs
+      operationId: getJobs
+      parameters:
+      - $ref: '#/components/parameters/f'
+      responses:
+        '200':
+          $ref: https://schemas.opengis.net/ogcapi/processes/part1/1.0/openapi/responses/JobList.yaml
+        default:
+          $ref: '#/components/responses/default'
+      tags:
+      - process
+  /jobs/{jobId}:
+    get:
+      summary: Gets status information on a particular Job
+      description: Gets status information on a particular Job
+      operationId: getJobInfoById
+      parameters:
+      - $ref: '#/components/parameters/f'
+      - $ref: "https://schemas.opengis.net/ogcapi/processes/part1/1.0/openapi/parameters/jobId.yaml"
+      responses:
+        '200':
+          $ref: https://schemas.opengis.net/ogcapi/processes/part1/1.0/openapi/responses/StatusInfo.yaml
+        default:
+          $ref: '#/components/responses/default'
+      tags:
+      - process
+    delete:
+      summary: Deletes a particular Job
+      description: Deletes a particular Job
+      operationId: deleteJobById
+      parameters:
+      - $ref: '#/components/parameters/f'
+      - $ref: "https://schemas.opengis.net/ogcapi/processes/part1/1.0/openapi/parameters/jobId.yaml"
+      responses:
+        '200':
+          $ref: https://schemas.opengis.net/ogcapi/processes/part1/1.0/openapi/responses/StatusInfo.yaml
+        default:
+          $ref: '#/components/responses/default'
+      tags:
+      - process
+  /jobs/{jobId}/results:
+    get:
+      summary: Gets results of a particular Job
+      description: Gets results of a particular Job
+      operationId: getJobResultsById
+      parameters:
+      - $ref: '#/components/parameters/f'
+      - $ref: "https://schemas.opengis.net/ogcapi/processes/part1/1.0/openapi/parameters/jobId.yaml"
+      responses:
+        '200':
+          $ref: https://schemas.opengis.net/ogcapi/processes/part1/1.0/openapi/responses/Results.yaml
+        default:
+          $ref: '#/components/responses/default'
+      tags:
+      - process
 
 servers:
 - description: NRCan's implementation of the PyGeoAPI to provide an API to NRCan's

@@ -60,7 +60,7 @@ def connect_s3_send_file(source_file: str, iam_role: str, bucket_name: str, pref
             prefix = prefix + "/"
 
         # Send the file to the bucket
-        s3_resource.Bucket(bucket_name).upload_file(source_file, prefix + os.path.basename(file))
+        s3_resource.Bucket(bucket_name).upload_file(source_file, prefix + file)
 
     except botocore.exceptions.ClientError as e:
         print("ERROR UPLOADING FILE TO S3")
