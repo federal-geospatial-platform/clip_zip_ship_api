@@ -102,13 +102,13 @@ ENV TZ=${TZ} \
     python3-yaml \
     ${ADD_DEB_PACKAGES}"
 
-WORKDIR /pygeoapi
-ADD . /pygeoapi
-
 # Set configuration for environment
 ARG AWS_ENV=dev
-COPY /pygeoapi/local.config.${AWS_ENV}.yml /pygeoapi/local.config.yml
-COPY /pygeoapi/local.openapi.${AWS_ENV}.yml /pygeoapi/local.openapi.yml
+COPY /local.config.${AWS_ENV}.yml /pygeoapi/local.config.yml
+COPY /local.openapi.${AWS_ENV}.yml /pygeoapi/local.openapi.yml
+
+WORKDIR /pygeoapi
+ADD . /pygeoapi
 
 # Install operating system dependencies
 RUN \
