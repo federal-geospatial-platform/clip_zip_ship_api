@@ -105,6 +105,11 @@ ENV TZ=${TZ} \
 WORKDIR /pygeoapi
 ADD . /pygeoapi
 
+# Set configuration for environment
+ARG AWS_ENV=dev
+COPY /pygeoapi/local.config.${AWS_ENV}yml /pygeoapi/local.config.yml
+COPY /pygeoapi/local.openapi.${AWS_ENV}yml /pygeoapi/local.openapi.yml
+
 # Install operating system dependencies
 RUN \
     apt-get update -y \
@@ -130,8 +135,6 @@ RUN \
     && pip3 install -e . \
 
     # Set default config and entrypoint for Docker Image
-    # && cp /pygeoapi/docker/local.config.yml /pygeoapi/local.config.yml \
-    # && cp /pygeoapi/docker/local.openapi.yml /pygeoapi/local.openapi.yml \
     && cp /pygeoapi/docker/entrypoint.sh /entrypoint.sh  \
 
     # Cleanup TODO: remove unused Locales and TZs

@@ -1,7 +1,7 @@
 servers:
 - description: NRCan's implementation of the PyGeoAPI to provide an API to NRCan's
     geospatial data
-  url: https://localhost:5000
+  url: https://czs-pygeoapi.ddr-dev.services.geo.ca
 tags:
 - description: NRCan's implementation of the PyGeoAPI to provide an API to NRCan's
     geospatial data

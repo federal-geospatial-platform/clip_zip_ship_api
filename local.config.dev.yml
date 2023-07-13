@@ -2,7 +2,7 @@ server:
     bind:
         host: 0.0.0.0
         port: 5000
-    url: https://czs-pygeoapi.ddr-stage.services.geo.ca
+    url: https://czs-pygeoapi.ddr-dev.services.geo.ca
     mimetype: application/json; charset=UTF-8
     encoding: utf-8
     gzip: false
@@ -19,10 +19,10 @@ server:
             contributors</a>
     ogc_schemas_location: http://schemas.opengis.net
 
-    manager:  # optional OGC API - Processes asynchronous job management
-        name: TinyDB  # plugin name (see pygeoapi.plugin for supported process_manager's)
-        connection: jobs/pygeoapi-process-manager.db  # connection info to store jobs (e.g. filepath)
-        output_dir: jobs/  # temporary file area for storing job results (files)
+    manager:
+        name: TinyDB
+        connection: jobs/pygeoapi-process-manager.db
+        output_dir: jobs/
 
 logging:
     level: INFO
@@ -63,7 +63,7 @@ metadata:
 settings:
     extract_url: http://ftp.ftp-staging.services.geo.ca/pub/czs/
     catalogue_url: https://maps.canada.ca/geonetwork/srv/eng/csw?request=GetRecordById&service=CSW&version=2.0.2&elementSetName=full&outputSchema=http://www.isotc211.org/2005/gmd&typeNames=gmd:MD_Metadata&constraintLanguage=FILTER&id={metadata_uuid}
-    secret_aws_key: /stage/cdtk_api_pygeoapi
+    secret_aws_key: /dev/cdtk_api_pygeoapi
 
 resources:
     obs:

@@ -1,15 +1,15 @@
-﻿server:
+server:
     bind:
         host: 0.0.0.0
         port: 5000
-    url: http://localhost:5000
+    url: https://czs-pygeoapi.ddr-stage.services.geo.ca
     mimetype: application/json; charset=UTF-8
     encoding: utf-8
     gzip: false
     languages:
     - en-US
     - fr-CA
-    cors: true
+    cors: false
     pretty_print: true
     limit: 500
     map:

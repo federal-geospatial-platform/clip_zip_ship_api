@@ -1,15 +1,15 @@
-﻿server:
+server:
     bind:
         host: 0.0.0.0
         port: 5000
-    url: http://localhost:5000
+    url: https://czs-pygeoapi.ddr.services.geo.ca
     mimetype: application/json; charset=UTF-8
     encoding: utf-8
     gzip: false
     languages:
     - en-US
     - fr-CA
-    cors: true
+    cors: false
     pretty_print: true
     limit: 500
     map:
@@ -61,9 +61,9 @@ metadata:
         role: pointOfContact
 
 settings:
-    extract_url: http://ftp.ftp-staging.services.geo.ca/pub/czs/
+    extract_url: http://ftp.ftp.services.geo.ca/pub/czs/
     catalogue_url: https://maps.canada.ca/geonetwork/srv/eng/csw?request=GetRecordById&service=CSW&version=2.0.2&elementSetName=full&outputSchema=http://www.isotc211.org/2005/gmd&typeNames=gmd:MD_Metadata&constraintLanguage=FILTER&id={metadata_uuid}
-    secret_aws_key: /stage/cdtk_api_pygeoapi
+    secret_aws_key: /prod/cdtk_api_pygeoapi
 
 resources:
     obs:
