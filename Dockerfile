@@ -143,4 +143,34 @@ RUN \
     && apt autoremove -y  \
     && rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT ["/entrypoint.sh"]
+# Install SSL and NGINX Configuration dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    jq \
+    curl \
+    awscli \
+    nginx-core && \
+    rm -rf /var/lib/apt/lists/*
+
+# Configure SSL
+Run mkdir /gccp
+COPY ssl/get-ssl-cert.sh /gccp/get-ssl-cert.sh
+COPY ssl/run-get-ssl-cert.sh /gccp/run-get-ssl-cert.sh
+RUN chmod +x /gccp/run-get-ssl-cert.sh /gccp/get-ssl-cert.sh && \
+    /gccp/run-get-ssl-cert.sh && \
+    rm -rf /gccp
+
+# Configure NGINX
+RUN unlink /etc/nginx/sites-enabled/default
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
+COPY nginx/server-api /etc/nginx/sites-available/server-api
+RUN ln -s /etc/nginx/sites-available/server-api /etc/nginx/sites-enabled/server-api
+
+# Set permissions and expose ports
+RUN chmod 1777 /pygeoapi && \
+    chown -R www-data:www-data /pygeoapi
+EXPOSE 443/tcp
+EXPOSE 80
+
+RUN chmod +x /entrypoint.sh
+
+CMD [ "service", "nginx", "start", "&&", "/entrypoint.sh" ]
