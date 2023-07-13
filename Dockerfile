@@ -107,8 +107,8 @@ ADD . /pygeoapi
 
 # Set configuration for environment
 ARG AWS_ENV=dev
-COPY /pygeoapi/local.config.${AWS_ENV}yml /pygeoapi/local.config.yml
-COPY /pygeoapi/local.openapi.${AWS_ENV}yml /pygeoapi/local.openapi.yml
+COPY /pygeoapi/local.config.${AWS_ENV}.yml /pygeoapi/local.config.yml
+COPY /pygeoapi/local.openapi.${AWS_ENV}.yml /pygeoapi/local.openapi.yml
 
 # Install operating system dependencies
 RUN \
