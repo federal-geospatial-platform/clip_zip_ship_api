@@ -1,7 +1,8 @@
+openapi: 3.0.2
 servers:
 - description: NRCan's implementation of the PyGeoAPI to provide an API to NRCan's
     geospatial data
-  url: https://localhost:5000
+  url: http://localhost:5000
 tags:
 - description: NRCan's implementation of the PyGeoAPI to provide an API to NRCan's
     geospatial data
@@ -26,7 +27,6 @@ info:
   - geospatial
   - data
   - api
-openapi: 3.0.2
 
 components:
   parameters:
