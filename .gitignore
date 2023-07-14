@@ -125,3 +125,4 @@ examples/django/sample_project/db.sqlite3
 /extractions
 /jobs/pygeoapi-process-manager.db
 /jobs
+/tests/data/open.canada.ca
