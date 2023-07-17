@@ -52,6 +52,7 @@ PROCESS_METADATA = {
         'en': 'This process takes a list of collections, a geometry wkt and crs as inputs and proceeds to extract the records of all collections.',
         'fr': 'Ce processus prend une liste de collections, une géométrie en format wkt avec un crs et extrait les enregistrements de toutes les collections.',
     },
+    'jobControlOptions': ['sync-execute', 'async-execute'],
     'keywords': ['extract'],
     'links': [{
         'type': 'text/html',
@@ -167,9 +168,23 @@ class ExtractProcessor(BaseProcessor):
         if self.on_query_validate_execution(geom, geom_crs, colls):
             # For each collection to query
             query_res = {}
+            i = 1
+            message = "Collections:\n"
             for c in colls:
+                # If running inside a job manager
+                if self.process_manager:
+                    # The progression can be a value between 10 and 90 (<10 and >90 reserved by the process manager itself)
+                    prog_value = (80 * i / len(colls)) + 10
+                    message = message + (" | " if i > 1 else "") + c
+
+                    # Update the job progress
+                    self.process_manager.update_job(self.job_id, {'message': message, 'progress': prog_value})
+
                 # Call on query with it which will query the collection based on its provider
                 query_res[c] = self.on_query(c, geom, geom_crs)
+
+                # Increment
+                i = i+1
 
             # Finalize the results
             self.on_query_finalize(data, query_res)

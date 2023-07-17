@@ -197,7 +197,7 @@ class BaseManager:
             args=(p, job_id, data_dict)
         )
         _process.start()
-        return 'application/json', None, JobStatus.accepted
+        return 'application/json', {'job_id': job_id}, JobStatus.accepted
 
     def _execute_handler_sync(self, p: BaseProcessor, job_id: str,
                               data_dict: dict) -> Tuple[str, Any, JobStatus]:
@@ -332,6 +332,10 @@ class BaseManager:
 
         job_id = str(uuid.uuid1())
         processor = self.get_processor(process_id)
+
+        # Running inside a process manager, set it
+        processor.set_process_manager(self, job_id)
+
         if execution_mode == RequestedProcessExecutionMode.respond_async:
             job_control_options = processor.metadata.get(
                 'jobControlOptions', [])
