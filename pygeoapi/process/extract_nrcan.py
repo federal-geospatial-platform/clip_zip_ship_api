@@ -27,10 +27,9 @@
 #
 # =================================================================
 
-import os, logging, json, zipfile, requests, psycopg2, uuid, emails
+import os, logging, json, zipfile, requests, uuid, emails, shutil
 import shapely, pyproj
 from mimetypes import guess_extension
-from psycopg2 import sql
 from xml.etree import cElementTree as ET
 from pygeoapi.process.extract import ExtractProcessor
 from pygeoapi import api_aws
@@ -62,6 +61,7 @@ PROCESS_METADATA = {
         'en': 'This process takes a list of collections and a geometry wkt as input, extracts the records, saves them as geojson in a zip file, stores the zip file to an S3 Bucket, and returns the URL to download the file.',
         'fr': 'Ce processus prend une liste de collections, une géométrie en format wkt, extrait les enregistrements qui intersectent la géométrie, sauvegarde les informations en geojson, sauvegarde le tout dans un zip file dans un Bucket S3, et retourne le chemin URL pour télécharger le fichier.',
     },
+    'jobControlOptions': ['async-execute'],
     'keywords': ['extract', 'clip zip ship'],
     'links': [{
         'type': 'text/html',
@@ -142,6 +142,8 @@ class ExtractNRCanProcessor(ExtractProcessor):
         """
 
         super().__init__(processor_def, PROCESS_METADATA)
+        self.extract_url = ""  # Will store the extract url result
+
 
     def on_query_validate_execution(self, geom: str, geom_crs: int, colls: list):
         """
@@ -175,6 +177,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         # All good
         return True
 
+
     def on_query_finalize(self, data: dict, query_res: dict):
         """
         Overrides the finalization process.
@@ -188,16 +191,19 @@ class ExtractNRCanProcessor(ExtractProcessor):
         # The files that we want to zip
         files = []
 
+        # Unique key for drive location
+        unique_key = uuid.uuid4()
+
         # For each collection result
         for c in query_res:
             # Depending on the type
             if self.get_collection_type(c) == "coverage":
                 # Save coverage image and keep track
-                files.append(self._save_file_image(c, self.get_collection_coverage_mimetype(c), query_res[c]))
+                files.append(self._save_file_image(unique_key, c, self.get_collection_coverage_mimetype(c), query_res[c]))
 
             else:
                 # Save to a JSON file and keep track
-                files.append(self._save_file_geojson(c, query_res[c]))
+                files.append(self._save_file_geojson(unique_key, c, query_res[c]))
 
             # Get the metadata xml for the collection
             metadata_xml = self.get_metadata_xml_from_coll_conf(self.processor_def['settings']['catalogue_url'],
@@ -205,25 +211,38 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
             # If found
             if metadata_xml:
-                files.append(self._save_file_xml(c, metadata_xml))
+                files.append(self._save_file_xml(unique_key, c, metadata_xml))
 
         # Destination zip file path and name
-        dest_zip = f'./{uuid.uuid4()}.zip'
+        dest_zip = f'{unique_key}.zip'
 
         # Save all files to a zip file
-        zip_file = self._zip_file(files, dest_zip)
+        zip_file = self._zip_file(unique_key, files, dest_zip)
 
         # Put the zip file in S3
-        api_aws.connect_s3_send_file(f"./{EXTRACT_FOLDER}/{dest_zip}",
+        api_aws.connect_s3_send_file(f"./{EXTRACT_FOLDER}/{unique_key}/{dest_zip}",
                                      self.processor_def['settings']['s3']['iam_role'],
                                      self.processor_def['settings']['s3']['bucket_name'],
                                      self.processor_def['settings']['s3']['bucket_prefix'],
-                                     dest_zip)
+                                     os.path.basename(dest_zip))
+
+        # Store the extract url
+        self.extract_url = f"{self.processor_def['settings']['extract_url']}{os.path.basename(dest_zip)}"
 
         # Send email
-        self.send_email(self.processor_def['settings']['email'], email,
-                        f"{self.processor_def['settings']['extract_url']}{os.path.basename(dest_zip)}", [], [],
-                        None)
+        self.send_email(self.processor_def['settings']['email'], email, self.extract_url, [], [], None)
+
+        # Now that it's copied on S3, delete local
+        shutil.rmtree(f"./{EXTRACT_FOLDER}/{unique_key}", ignore_errors=True)
+
+
+    def on_query_results(self, query_res: dict):
+        """
+        Overrides the results to return a json of the extract url instead of the actual data from the extraction.
+        """
+
+        return 'application/json', {'extract_url': self.extract_url}
+
 
     @staticmethod
     def get_metadata_xml_from_coll_conf(catalog_url: str, coll_conf: dict):
@@ -249,6 +268,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         except Exception as err:
             print("Couldn't read metadata from catalog: " + str(err))
 
+
     @staticmethod
     def get_metadata_from_links(links: list):
         """
@@ -262,61 +282,66 @@ class ExtractNRCanProcessor(ExtractProcessor):
                 return os.path.basename(l['href'])
         return None
 
+
     @staticmethod
-    def _save_file_geojson(coll_name: str, query_res: dict):
+    def _save_file_geojson(extract_key: str, coll_name: str, query_res: dict):
         """
         Saves the given query_res in a geojson file in the EXTRACT_FOLDER
         """
 
         file_name = f"{coll_name}.geojson"
-        if not os.path.exists(f'./{EXTRACT_FOLDER}'):
-            os.makedirs(f'./{EXTRACT_FOLDER}')
-        with open(f'./{EXTRACT_FOLDER}/{file_name}', 'w', encoding='utf-8') as f:
+        if not os.path.exists(f'./{EXTRACT_FOLDER}/{extract_key}'):
+            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}')
+        with open(f'./{EXTRACT_FOLDER}/{extract_key}/{file_name}', 'w', encoding='utf-8') as f:
             json.dump(query_res, f, indent=4)
         return file_name
 
+
     @staticmethod
-    def _save_file_image(coll_name: str, mimetype: str, query_res):
+    def _save_file_image(extract_key: str, coll_name: str, mimetype: str, query_res):
         """
         Saves the given query_res in a geojson file in the EXTRACT_FOLDER
         """
         file_name = f"{coll_name}{guess_extension(mimetype)}"
-        if not os.path.exists(f'./{EXTRACT_FOLDER}'):
-            os.makedirs(f'./{EXTRACT_FOLDER}')
-        with open(f'./{EXTRACT_FOLDER}/{file_name}', 'wb') as f:
+        if not os.path.exists(f'./{EXTRACT_FOLDER}/{extract_key}'):
+            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}')
+        with open(f'./{EXTRACT_FOLDER}/{extract_key}/{file_name}', 'wb') as f:
             f.write(query_res)
         return file_name
 
+
     @staticmethod
-    def _save_file_xml(coll_name: str, query_res: dict):
+    def _save_file_xml(extract_key: str, coll_name: str, query_res: dict):
         """
         Saves the given xml query_res in a xml file in the EXTRACT_FOLDER
         """
 
         file_name = f"{coll_name}.xml"
-        if not os.path.exists(f'./{EXTRACT_FOLDER}'):
-            os.makedirs(f'./{EXTRACT_FOLDER}')
-        with open(f'./{EXTRACT_FOLDER}/{file_name}', 'w', encoding='utf-8') as f:
+        if not os.path.exists(f'./{EXTRACT_FOLDER}/{extract_key}'):
+            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}')
+        with open(f'./{EXTRACT_FOLDER}/{extract_key}/{file_name}', 'w', encoding='utf-8') as f:
             f.write(query_res)
         return file_name
 
+
     @staticmethod
-    def _zip_file(file_names: list, zip_file_name: str):
+    def _zip_file(extract_key: str, file_names: list, zip_file_name: str):
         """
         Saves the given file names in a zip file in the EXTRACT_FOLDER and
         deletes the original files in the process.
         """
 
-        if not os.path.exists(f'./{EXTRACT_FOLDER}'):
-            os.makedirs(f'./{EXTRACT_FOLDER}')
-        with zipfile.ZipFile(f"./{EXTRACT_FOLDER}/{zip_file_name}", 'w', zipfile.ZIP_DEFLATED) as zipf:
+        if not os.path.exists(f'./{EXTRACT_FOLDER}/{extract_key}'):
+            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}')
+        with zipfile.ZipFile(f"./{EXTRACT_FOLDER}/{extract_key}/{zip_file_name}", 'w', zipfile.ZIP_DEFLATED) as zipf:
             for f in file_names:
                 # Write the file in the zip
-                zipf.write(f'./{EXTRACT_FOLDER}/{f}', f'./{f}')
+                zipf.write(f'./{EXTRACT_FOLDER}/{extract_key}/{f}', f'./{f}')
                 # Delete the file now that it's in the zip
-                os.remove(f'./{EXTRACT_FOLDER}/{f}')
+                os.remove(f'./{EXTRACT_FOLDER}/{extract_key}/{f}')
             zipf.close()
             return zipf
+
 
     @staticmethod
     def send_email(email_config: dict, email: str, download_link: str, warnings: list, errors: list, big_error: Exception):
@@ -345,6 +370,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
                 "tls": True
             }
         )
+
 
     @staticmethod
     def _send_emails_body_user(email: str, download_link: str, email_from: str, warnings: list, errors: list, big_error: Exception):
@@ -412,6 +438,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
         # Redirect
         return ExtractNRCanProcessor._send_emails_body_build(html_title, html_title_color, html_content, html_footer_sent_to)
+
 
     @staticmethod
     def _send_emails_body_build(html_title: str, title_color: str, html_body_content: str, html_footer_sent_to: str):
