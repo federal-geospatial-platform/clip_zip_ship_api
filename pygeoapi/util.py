@@ -565,6 +565,7 @@ class JobStatus(Enum):
     """
 
     #  From the specification
+    in_queue = 'in_queue'
     accepted = 'accepted'
     running = 'running'
     successful = 'successful'
