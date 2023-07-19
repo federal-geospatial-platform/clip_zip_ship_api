@@ -46,6 +46,14 @@ class API_CZS(API):
         self.config["settings"]["email"] = aws_secrets["email"]
         self.config["settings"]["s3"] = aws_secrets["s3"]
 
+        # Set the manager config on-the-fly as well
+        self.config["server"]["manager"]["connection"] = {}
+        self.config["server"]["manager"]["connection"]["host"] = aws_secrets["database"]["host"]
+        self.config["server"]["manager"]["connection"]["port"] = aws_secrets["database"]["port"]
+        self.config["server"]["manager"]["connection"]["dbname"] = aws_secrets["database"]["dbname"]
+        self.config["server"]["manager"]["connection"]["user"] = aws_secrets["database"]["user"]
+        self.config["server"]["manager"]["connection"]["password"] = aws_secrets["database"]["password"]
+
         # Open the connection
         with open_conn(self.config["settings"]["database"]) as conn:
             # Flush the resources with a new dictionary

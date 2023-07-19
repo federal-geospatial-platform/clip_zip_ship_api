@@ -20,9 +20,9 @@
     ogc_schemas_location: http://schemas.opengis.net
 
     manager:
-        name: TinyDB
-        connection: jobs/pygeoapi-process-manager.db
-        output_dir: jobs/
+        name: PostgresDB
+        max_concurrent: 0
+        max_queue: 0
 
 logging:
     level: INFO

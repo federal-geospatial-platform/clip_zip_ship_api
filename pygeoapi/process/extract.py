@@ -173,8 +173,8 @@ class ExtractProcessor(BaseProcessor):
             for c in colls:
                 # If running inside a job manager
                 if self.process_manager:
-                    # The progression can be a value between 10 and 90 (<10 and >90 reserved by the process manager itself)
-                    prog_value = (80 * i / len(colls)) + 10
+                    # The progression can be a value between 15 and 85 (<10 and >90 reserved by the process manager itself)
+                    prog_value = ((85 - 15) * i / len(colls)) + 15
                     message = message + (" | " if i > 1 else "") + c
 
                     # Update the job progress
