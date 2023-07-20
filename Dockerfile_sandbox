@@ -102,13 +102,11 @@ ENV TZ=${TZ} \
     python3-yaml \
     ${ADD_DEB_PACKAGES}"
 
-# Set configuration for environment
-ARG AWS_ENV=sandbox
-COPY /local.config.${AWS_ENV}.yml /pygeoapi/local.config.yml
-COPY /local.openapi.${AWS_ENV}.yml /pygeoapi/local.openapi.yml
-
 WORKDIR /pygeoapi
 ADD . /pygeoapi
+
+# Set configuration for environment
+ARG AWS_ENV=sandbox
 
 # Install operating system dependencies
 RUN \
@@ -136,6 +134,8 @@ RUN \
 
     # Set default config and entrypoint for Docker Image
     && cp /pygeoapi/docker/entrypoint.sh /entrypoint.sh  \
+    && cp /pygeoapi/local.config.${AWS_ENV}.yml /pygeoapi/local.config.yml \
+    && cp /pygeoapi/local.openapi.${AWS_ENV}.yml /pygeoapi/local.openapi.yml \
 
     # Cleanup TODO: remove unused Locales and TZs
     && apt-get remove --purge -y gcc ${DEB_BUILD_DEPS} \
