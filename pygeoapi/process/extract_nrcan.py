@@ -291,7 +291,8 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
         file_name = f"{coll_name}.geojson"
         if not os.path.exists(f'./{EXTRACT_FOLDER}/{extract_key}'):
-            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}')
+            os.umask(0)
+            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}', mode=0o777)
         with open(f'./{EXTRACT_FOLDER}/{extract_key}/{file_name}', 'w', encoding='utf-8') as f:
             json.dump(query_res, f, indent=4)
         return file_name
@@ -304,7 +305,8 @@ class ExtractNRCanProcessor(ExtractProcessor):
         """
         file_name = f"{coll_name}{guess_extension(mimetype)}"
         if not os.path.exists(f'./{EXTRACT_FOLDER}/{extract_key}'):
-            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}')
+            os.umask(0)
+            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}', mode=0o777)
         with open(f'./{EXTRACT_FOLDER}/{extract_key}/{file_name}', 'wb') as f:
             f.write(query_res)
         return file_name
@@ -318,7 +320,8 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
         file_name = f"{coll_name}.xml"
         if not os.path.exists(f'./{EXTRACT_FOLDER}/{extract_key}'):
-            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}')
+            os.umask(0)
+            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}', mode=0o777)
         with open(f'./{EXTRACT_FOLDER}/{extract_key}/{file_name}', 'w', encoding='utf-8') as f:
             f.write(query_res)
         return file_name
@@ -332,7 +335,8 @@ class ExtractNRCanProcessor(ExtractProcessor):
         """
 
         if not os.path.exists(f'./{EXTRACT_FOLDER}/{extract_key}'):
-            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}')
+            os.umask(0)
+            os.makedirs(f'./{EXTRACT_FOLDER}/{extract_key}', mode=0o777)
         with zipfile.ZipFile(f"./{EXTRACT_FOLDER}/{extract_key}/{zip_file_name}", 'w', zipfile.ZIP_DEFLATED) as zipf:
             for f in file_names:
                 # Write the file in the zip
