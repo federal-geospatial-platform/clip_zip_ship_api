@@ -205,7 +205,13 @@ class PostgreSQLProvider(BaseProvider):
                 'type': 'FeatureCollection',
                 'features': [],
                 'numberMatched': matched,
-                'numberReturned': returned
+                'numberReturned': returned,
+                'crs': {
+                    'type': 'name',
+                    'properties': {
+                        'name': f'urn:ogc:def:crs:EPSG::{self.srid}'
+                    }
+                }
             }
 
             if resulttype == "hits" or not results:
@@ -220,7 +226,7 @@ class PostgreSQLProvider(BaseProvider):
                     # Do more with say item[1], item[2], ...
                     shapely_geom = to_shape(item[1])
                     geojson_geom = shapely.geometry.mapping(shapely_geom)
-                    obj['geometry_clipped'] = geojson_geom
+                    obj['geometry'] = geojson_geom
                     response['features'].append(obj)
 
                 else:
