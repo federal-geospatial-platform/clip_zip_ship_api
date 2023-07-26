@@ -1741,7 +1741,22 @@ class API:
                 'InvalidParameterValue', msg)
 
         # Grab the clip parameter if existing
-        clip = request.params.get('clip') or False
+        clip = 0
+        try:
+            clip = int(request.params.get('clip'))
+            if clip < 0:
+                msg = 'clip value should be positive or zero'
+                return self.get_exception(
+                    HTTPStatus.BAD_REQUEST, headers, request.format,
+                    'InvalidParameterValue', msg)
+        except TypeError as err:
+            LOGGER.warning(err)
+            clip = 0
+        except ValueError:
+            msg = 'clip value should be an integer'
+            return self.get_exception(
+                HTTPStatus.BAD_REQUEST, headers, request.format,
+                'InvalidParameterValue', msg)
 
         LOGGER.debug('Processing datetime parameter')
         datetime_ = request.params.get('datetime')

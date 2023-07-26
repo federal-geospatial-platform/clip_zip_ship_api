@@ -225,7 +225,7 @@ class ExtractProcessor(BaseProcessor):
                           select_properties=[],
                           skip_geometry=False,
                           q=None, language='en', filterq=None,
-                          clip=True)
+                          clip=1)
 
         elif c_type == "coverage":
             # Query using the provider logic

@@ -121,7 +121,7 @@ class PostgreSQLProvider(BaseProvider):
               geom_crs=None, data_crs=None,
               datetime_=None, properties=[], sortby=[],
               select_properties=[], skip_geometry=False, q=None,
-              filterq=None, crs_transform_spec=None, clip=False, **kwargs):
+              filterq=None, crs_transform_spec=None, clip=0, **kwargs):
         """
         Query Postgis for all the content.
         e,g: http://localhost:5000/collections/hotosm_bdi_waterways/items?
@@ -175,7 +175,7 @@ class PostgreSQLProvider(BaseProvider):
                     limit = 1000000000
             ##### NRCAN SPECIFIC END
 
-            if clip and geom_wkt:
+            if clip > 0 and geom_wkt:
                 results = (session.query(self.table_model, ST_Intersection(getattr(self.table_model, self.geom), ST_Transform(ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs)), self.srid)).label('inters'))
                            .filter(property_filters)
                            .filter(cql_filters)
@@ -219,14 +219,20 @@ class PostgreSQLProvider(BaseProvider):
                 return response
             crs_transform_out = self._get_crs_transform(crs_transform_spec)
             for item in results.limit(limit):
-                if clip and geom_wkt:
+                if clip > 0 and geom_wkt:
                     # Default to feature, with item[0]
                     obj = self._sqlalchemy_to_feature(item[0], crs_transform_out)
 
                     # Do more with say item[1], item[2], ...
                     shapely_geom = to_shape(item[1])
                     geojson_geom = shapely.geometry.mapping(shapely_geom)
-                    obj['geometry'] = geojson_geom
+                    if clip == 2:
+                        # Store as enhanced attribute in the geojson
+                        obj['geometry_clipped'] = geojson_geom
+
+                    else:
+                        # Override
+                        obj['geometry'] = geojson_geom
                     response['features'].append(obj)
 
                 else:
