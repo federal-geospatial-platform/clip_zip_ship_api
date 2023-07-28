@@ -62,7 +62,6 @@ class PostgresDBManager(BaseManager):
 
         super().__init__(manager_def)
         self.is_async = True
-        self.result_in_db = True
         self.host = manager_def['connection']['host']
         self.port = manager_def['connection']['port']
         self.dbname = manager_def['connection']['dbname']

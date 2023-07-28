@@ -80,7 +80,8 @@ class BaseManager:
         self.output_dir = manager_def.get('output_dir')
         self.max_concurrent = manager_def.get('max_concurrent', 0)
         self.max_queue = manager_def.get('max_queue', 0)
-        self.result_in_db = False
+        self.result_in_db = manager_def.get('result_in_db', False)
+        self.internal_error_in_db = manager_def.get('internal_error_in_db', False)
         self.job_pending = 0
 
         if self.output_dir is not None:
@@ -358,7 +359,6 @@ class BaseManager:
                 else:
                     code = 'InvalidParameterValue'
                     description = 'Error processing job'
-                    print(err)
 
                 outputs = {
                     'code': code,
@@ -378,6 +378,11 @@ class BaseManager:
 
                 jfmt = 'application/json'
 
+                # If the internal error is going in the database
+                if self.internal_error_in_db:
+                    job_metadata['internal_error'] = str(err)
+
+                # Update the job
                 self.update_job(job_id, job_metadata)
 
             return jfmt, outputs, current_status
