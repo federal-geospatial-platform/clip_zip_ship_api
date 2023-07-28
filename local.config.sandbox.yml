@@ -23,6 +23,8 @@ server:
         name: PostgresDB
         max_concurrent: 0
         max_queue: 0
+        result_in_db: true
+        internal_error_in_db: true
 
 logging:
     level: INFO
