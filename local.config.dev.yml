@@ -25,7 +25,7 @@ server:
         max_queue: 0
 
 logging:
-    level: ERROR
+    level: INFO
 metadata:
     identification:
         title: PyGeoAPI for NRCan collections
