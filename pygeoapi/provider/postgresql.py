@@ -96,7 +96,7 @@ class PostgreSQLProvider(BaseProvider):
         self.table = provider_def['table']
         self.id_field = provider_def['id_field']
         self.geom = provider_def.get('geom_field', 'geom')
-        self.max_area_km_2 = provider_def['max_area'] if 'max_area' in provider_def else 1000
+        self.max_extract_area_km_2 = provider_def['max_extract_area'] if 'max_extract_area' in provider_def else 1000
 
         LOGGER.debug(f'Name: {self.name}')
         LOGGER.debug(f'Table: {self.table}')
@@ -169,7 +169,7 @@ class PostgreSQLProvider(BaseProvider):
             # If there's a geometry for the request
             if geom_wkt:
                 # If the area is valid
-                if get_area_from_wkt_in_km2(geom_wkt, geom_crs) <= self.max_area_km_2:
+                if get_area_from_wkt_in_km2(geom_wkt, geom_crs) <= self.max_extract_area_km_2:
                     # Limit can be infinite
                     print("Override the limit!")
                     limit = 1000000000

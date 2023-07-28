@@ -160,9 +160,13 @@ class ExtractProcessor(BaseProcessor):
         """
 
         # Read the input params
+        email = data['email']
         geom = data['geom']
         geom_crs = data['geom_crs']
         colls = data['collections']
+
+        # Update the job progress
+        self.process_manager.update_job(self.job_id, {'collections': colls, 'email': email, 'geom': geom, 'geom_crs': geom_crs})
 
         # Validate execution
         if self.on_query_validate_execution(geom, geom_crs, colls):

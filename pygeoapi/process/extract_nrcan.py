@@ -163,11 +163,11 @@ class ExtractNRCanProcessor(ExtractProcessor):
             c = self.processor_def['collections'][coll_name]
 
             # Read the max area
-            max_area = c['providers'][0]['max_area']
+            max_extract_area = c['providers'][0]['max_extract_area']
 
             # If the area is over the maximum for the collection
-            if area > max_area:
-                msg = f'clipping area was {area} km2 which is over {max_area} km2 for collection: {coll_name}'
+            if area > max_extract_area:
+                msg = f'clipping area was {area} km2 which is over {max_extract_area} km2 for collection: {coll_name}'
                 LOGGER.warning(msg)
                 raise ProviderRequestEntityTooLargeError(msg)
 

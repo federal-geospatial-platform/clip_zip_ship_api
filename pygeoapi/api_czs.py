@@ -215,8 +215,8 @@ class API_CZS(API):
         if 'providers' in input_coll and 'crs' in input_coll["providers"][0]:
             active_coll['crs'] = input_coll["providers"][0]["crs"]
 
-        if 'providers' in input_coll and 'max_area' in input_coll["providers"][0]:
-            active_coll['max_area'] = input_coll["providers"][0]['max_area']
+        if 'providers' in input_coll and 'max_extract_area' in input_coll["providers"][0]:
+            active_coll['max_extract_area'] = input_coll["providers"][0]['max_extract_area']
 
 
     @pre_process

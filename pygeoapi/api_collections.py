@@ -107,7 +107,7 @@ rasterio_template =\
             name:
             mimetype:
         crs: null
-        max_area: 1000
+        max_extract_area: 1000
 '''
 
 
@@ -164,7 +164,7 @@ def load_template_common(itemvalue, template, data):
     itemvalue["providers"][0]["type"] = data["provider_type"]
     itemvalue["providers"][0]["name"] = data["provider_name"]
     itemvalue["providers"][0]["crs"] = [data["collection_crs"]]
-    #itemvalue["providers"][0]["max_area"] = 1000 # Read this value from the database?
+    itemvalue["providers"][0]["max_extract_area"] = data["max_extract_area"]
 
 
 def load_template_postgres(template, data):

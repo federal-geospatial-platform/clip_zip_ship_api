@@ -53,7 +53,10 @@ from pygeoapi.util import (
     ProcessExecutionMode,
     RequestedProcessExecutionMode,
 )
-
+from pygeoapi.provider.base import (
+    ProviderPreconditionFailed,
+    ProviderRequestEntityTooLargeError
+)
 LOGGER = logging.getLogger(__name__)
 
 
@@ -342,16 +345,27 @@ class BaseManager:
                 # endpoint, even if the /result endpoint correctly returns the
                 # failure information (i.e. what one might assume is a 200
                 # response).
-                print("ERROR")
-                print(err)
 
                 current_status = JobStatus.failed
-                code = 'InvalidParameterValue'
+                if isinstance(err, ProviderPreconditionFailed):
+                    code = 'PreconditionFailed'
+                    description = str(err)
+
+                elif isinstance(err, ProviderRequestEntityTooLargeError):
+                    code = 'RequestEntityTooLargeError'
+                    description = str(err)
+
+                else:
+                    code = 'InvalidParameterValue'
+                    description = 'Error processing job'
+                    print(err)
+
                 outputs = {
                     'code': code,
                     'error': err,
-                    'description': 'Error updating job'
+                    'description': description
                 }
+
                 LOGGER.error(err)
                 job_metadata = {
                     'job_end_datetime': datetime.utcnow().strftime(

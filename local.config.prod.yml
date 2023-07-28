@@ -7,8 +7,8 @@ server:
     encoding: utf-8
     gzip: false
     languages:
-    - en-US
-    - fr-CA
+        - en-US
+        - fr-CA
     cors: false
     pretty_print: true
     limit: 500
