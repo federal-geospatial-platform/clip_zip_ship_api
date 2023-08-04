@@ -31,10 +31,19 @@ import os, logging, json, zipfile, requests, uuid, emails, shutil
 import shapely, pyproj
 from mimetypes import guess_extension
 from xml.etree import cElementTree as ET
-from pygeoapi.process.extract import ExtractProcessor
+from pygeoapi.process.extract import (
+    ExtractProcessor,
+    CollectionsUndefinedException,
+    CollectionsNotFoundException,
+    ClippingAreaUndefinedException,
+    ClippingAreaCrsUndefinedException
+)
 from pygeoapi import api_aws
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
-from pygeoapi.provider.base import ProviderPreconditionFailed, ProviderRequestEntityTooLargeError
+from pygeoapi.provider.base import (
+    ProviderPreconditionFailed,
+    ProviderRequestEntityTooLargeError
+)
 from pygeoapi.util import get_provider_by_type, to_json, get_area_from_wkt_in_km2
 from pygeoapi.plugin import load_plugin
 
@@ -143,22 +152,87 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
         super().__init__(processor_def, PROCESS_METADATA)
         self.extract_url = ""  # Will store the extract url result
+        self.email = None  # The email for the process
+        self.errors = []  # The errors during the process
 
 
-    def on_query_validate_execution(self, geom: str, geom_crs: int, colls: list):
+    def on_query_validate_inputs(self, data: dict):
+        """
+        Override this method to perform validations of inputs
+        """
+
+        if "email" in data and data['email']:
+            # Store the email
+            self.email = data['email']
+
+        else:
+            # Error
+            err = EmailUndefinedException()
+            self.errors.append(err)
+            LOGGER.warning(err)
+
+        if "collections" in data and data['collections']:
+            # Store the collections
+            self.colls = data['collections']
+
+            # Check if each collection exists
+            for c in self.colls:
+                if not c in self.processor_def['collections']:
+                    # Error
+                    err = CollectionsNotFoundException(c)
+                    self.errors.append(err)
+                    LOGGER.warning(err)
+
+        else:
+            # Error
+            err = CollectionsUndefinedException()
+            self.errors.append(err)
+            LOGGER.warning(err)
+
+        if "geom" in data and data['geom']:
+            # Store the input geometry
+            self.geom_wkt = data['geom']
+
+        else:
+            # Error
+            err = ClippingAreaUndefinedException()
+            self.errors.append(err)
+            LOGGER.warning(err)
+
+        if "geom_crs" in data and data["geom_crs"]:
+            # Store the crs
+            self.geom_crs = data["geom_crs"]
+
+        else:
+            # Error
+            err = ClippingAreaCrsUndefinedException()
+            self.errors.append(err)
+            LOGGER.warning(err)
+
+        # Update the job with the received parameters
+        # Obfuscate the email
+        email = self.email
+        if email and '@' in email:
+            email = '@' + email.split('@')[1]
+        self.process_manager.update_job(self.job_id, {'collections': self.colls, 'email': email, 'geom': self.geom_wkt, 'geom_crs': self.geom_crs})
+
+        # If no errors
+        if not self.errors:
+            # All good
+            return True
+        return False
+
+
+    def on_query_validate_execution(self, data: dict):
         """
         Override this method to perform validations pre-execution
         """
-        if not geom:
-            msg = f'clipping area was undefined'
-            LOGGER.warning(msg)
-            raise ProviderPreconditionFailed(msg)
-
-        # Get the area of the geometry
-        area = get_area_from_wkt_in_km2(geom, geom_crs)
+        # Get the area of the input geometry
+        area = get_area_from_wkt_in_km2(self.geom_wkt, self.geom_crs)
 
         # For each collection to extract
-        for coll_name in colls:
+        collection_over_limit = False
+        for coll_name in self.colls:
             # Read collection config
             c = self.processor_def['collections'][coll_name]
 
@@ -167,15 +241,16 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
             # If the area is over the maximum for the collection
             if area > max_extract_area:
-                msg = f'clipping area was {area} km2 which is over {max_extract_area} km2 for collection: {coll_name}'
-                LOGGER.warning(msg)
-                raise ProviderRequestEntityTooLargeError(msg)
+                err = ClippingAreaTooLargeException(coll_name, max_extract_area, area)
+                self.errors.append(err)
+                LOGGER.warning(err)
+                collection_over_limit = True
 
-        # Get list of collections of type coverage
-        # collections_cov = list(filter(lambda c: c['providers'][0]['type'] == "coverage", collections))
-
-        # All good
-        return True
+        # If no errors
+        if not self.errors:
+            # All good
+            return True
+        return False
 
 
     def on_query_finalize(self, data: dict, query_res: dict):
@@ -184,9 +259,6 @@ class ExtractNRCanProcessor(ExtractProcessor):
         Now that the query on each collection has happened and we have the results, we create
         a zip file and place the zip in a S3 Bucket.
         """
-
-        # Read the email in the parameters
-        email = data['email']
 
         # The files that we want to zip
         files = []
@@ -230,10 +302,25 @@ class ExtractNRCanProcessor(ExtractProcessor):
         self.extract_url = f"{self.processor_def['settings']['extract_url']}{os.path.basename(dest_zip)}"
 
         # Send email
-        self.send_email(self.processor_def['settings']['email'], email, self.extract_url, [], [], None)
+        self.send_emails(self.processor_def['settings']['email'], self.job_id, self.email, self.colls, self.geom_wkt, self.geom_crs, self.extract_url, [], self.errors, None)
 
         # Now that it's copied on S3, delete local
-        shutil.rmtree(f"./{EXTRACT_FOLDER}/{unique_key}", ignore_errors=True)
+        #shutil.rmtree(f"./{EXTRACT_FOLDER}/{unique_key}", ignore_errors=True)
+
+
+    def on_exception(self, exception: Exception):
+        """
+        Overrides the behavior when an exception happened in the process
+        """
+
+        # Try sending an email
+        try:
+            self.send_emails(self.processor_def['settings']['email'], self.job_id, self.email, self.colls, self.geom_wkt, self.geom_crs, self.extract_url, [], self.errors, exception)
+
+        except:
+            # Continue
+            raise
+            #pass
 
 
     def on_query_results(self, query_res: dict):
@@ -348,73 +435,114 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
 
     @staticmethod
-    def send_email(email_config: dict, email: str, download_link: str, warnings: list, errors: list, big_error: Exception):
+    def send_emails(email_config: dict, job_id: str, email: str, colls: list, geom_wkt: str, geom_crs: str, download_link: str, warnings: list, errors: list, big_error: Exception):
         """
         Sends an email
         """
 
-        # Prepare the email
-        message = emails.html(
-            html=ExtractNRCanProcessor._send_emails_body_user(email, download_link, email_config['from'], warnings, errors, big_error),
-            subject="Résultat de votre requête d'extraction / Result of your extraction request",
-            mail_from=email_config['from']
-        )
+        # If there's an email
+        if email:
+            # Prepare the email
+            message = emails.html(
+                html=ExtractNRCanProcessor._send_emails_body_user(job_id, email, colls, geom_wkt, geom_crs, download_link, email_config['from'], warnings, errors, big_error),
+                subject="Résultat de votre requête d'extraction / Result of your extraction request",
+                mail_from=email_config['from']
+            )
 
-        #message.cc = config_env.EMAIL_ADMIN
+            # If there was no error
+            if not errors and not big_error:
+                # Add admin in CC
+                message.cc = email_config['admin_user_cc']
 
-        # Send the email
-        r = message.send(
-            to=email,
-            smtp={
-                "host": email_config['host'],
-                "port": email_config['port'],
-                "timeout": email_config['timeout'],
-                "user": email_config['username'],
-                "password": email_config['password'],
-                "tls": True
-            }
-        )
+            # Send the email
+            r = message.send(
+                to=email,
+                smtp={
+                    "host": email_config['host'],
+                    "port": email_config['port'],
+                    "timeout": email_config['timeout'],
+                    "user": email_config['username'],
+                    "password": email_config['password'],
+                    "tls": True
+                }
+            )
+
+        # If there was some error
+        if errors or big_error:
+            # Prepare the email
+            message = emails.html(
+                html=ExtractNRCanProcessor._send_emails_body_admin(job_id, email, colls, geom_wkt, geom_crs, [], warnings, errors, big_error),
+                subject="Résultat d'une requête d'extraction / Result of an extraction request",
+                mail_from=email_config['from']
+            )
+
+            # Send the email
+            r = message.send(
+                to=email_config['admin_main'],
+                smtp={
+                    "host": email_config['host'],
+                    "port": email_config['port'],
+                    "timeout": email_config['timeout'],
+                    "user": email_config['username'],
+                    "password": email_config['password'],
+                    "tls": True
+                }
+            )
 
 
     @staticmethod
-    def _send_emails_body_user(email: str, download_link: str, email_from: str, warnings: list, errors: list, big_error: Exception):
+    def _send_emails_body_user(job_id: str, email: str, colls: list, geom_wkt: str, geom_crs: str, download_link: str, email_from: str, warnings: list, errors: list, big_error: Exception):
 
         # Read the warnings
-        #[english_warnings, french_warnings] = _combine_warnings_for_response(warnings, prefix="<li>", suffix="</li>")
+        [english_warnings, french_warnings] = [None, None]
 
         # If the process was a success
         html_title_color = "#1877f2"
         html_title = "Succès de l'opération d'extraction / Success of the extraction process"
 
-        html_content = f"<i>(English message follows)</i><br/><br/>"
+        html_content = f"<i>(English message follows)</i><br/>"
 
         #
         # French version
         #
-        html_content = html_content + f"Bonjour,<br/><br/>"
+        html_content = html_content + f"<br/>Bonjour,<br/><br/>"
         if not errors and not big_error:
-            html_content = html_content + f"Votre requête d'extraction a été exécutée avec succès.<br/>Voici le lien de téléchargement: <a href=\"{download_link}\">{download_link}</a>"
+            html_content = html_content + f"Votre requête d'extraction a été exécutée avec succès.<br/>Voici le lien de téléchargement: <a href=\"{download_link}\">{download_link}</a><br/><br/>"
 
         # If there's been a major error the user shouldn't necessary know the details
         user_msg = None
-        if big_error and not errors:
+        if errors:
+            html_title_color = "#e80000"
+            html_title = "Échec de l'opération d'extraction / Failure of the extraction process"
+            user_msg = ExtractNRCanProcessor._combine_exceptions_for_response(errors, prefix="<li>", suffix="</li>")
+            html_content = html_content + f"L'opération a échouée pour la (les) raison(s) suivantes:<ul>{user_msg.message_fr}</ul><br/>"
+
+        # If there's been an issue the user should be informed
+        elif big_error:
             html_title_color = "#e80000"
             html_title = "Échec de l'opération d'extraction / Failure of the extraction process"
             html_content = html_content + f"Un incident majeur est survenu. Un administrateur a été immédiatement informé. <a href=\"mailto:{email_from}\">SVP contactez nous</a>.<br/><br/>"
 
-        # If there's been an issue the user should be informed
-        elif errors:
-            html_title_color = "#e80000"
-            html_title = "Échec de l'opération d'extraction / Failure of the extraction process"
-            #user_msg = _combine_exceptions_for_response(errors, prefix="<li>", suffix="</li>")
-            #html_content = html_content + f"L'opération a échouée pour la (les) raison(s) suivantes:<ul>{user_msg.message_fr}</ul>"
-
         # If there was any warning
-        #if warnings:
-        #    html_content = html_content + f"Les avertissements suivants sont survenus:<ul>{french_warnings}</ul>"
+        if warnings:
+            html_content = html_content + f"Les avertissements suivants sont survenus:<ul>{french_warnings}</ul><br/>"
+
+        # Information on the job
+        colls_string = None
+        if colls:
+            for c in colls:
+                if not colls_string:
+                    colls_string = ""
+                colls_string = colls_string + f"<li>{c}</li>"
+        parameters = f"<li>JobID: {job_id}</li>"
+        #parameters = parameters + f"<li>Email: {email}</li>"
+        parameters = parameters + f"<li>Collections:<ul>{colls_string}</ul></li>"
+        parameters = parameters + f"<li>GeomWKT: {geom_wkt}</li>"
+        parameters = parameters + f"<li>GeomCRS: {geom_crs}</li>"
+        html_content = html_content + f"Information sur le traitement:<ul>{parameters}</ul><br/>"
 
         # French closing
-        html_content = html_content + f"<br/><br/><div>Merci,<br/>L'équipe d'extraction Clip Zip Ship<br/><i>Avez-vous besoin d'aide pour votre service cartographique? <a href=\"mailto:{email_from}\">Contactez notre équipe</a>.</i></div>"
+        html_content = html_content + f"<div>Merci,<br/>L'équipe d'extraction Clip Zip Ship<br/><i>Avez-vous besoin d'aide pour votre service cartographique? <a href=\"mailto:{email_from}\">Contactez notre équipe</a>.</i></div>"
         html_content = html_content + "<br/><br/>-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------<br/><br/>"
 
         #
@@ -422,26 +550,134 @@ class ExtractNRCanProcessor(ExtractProcessor):
         #
         html_content = html_content + f"Hi,<br/><br/>"
         if not errors and not big_error:
-            html_content = html_content + f"Your extraction request proceeded successfully.<br/>Here's the download link: <a href=\"{download_link}\">{download_link}</a>"
+            html_content = html_content + f"Your extraction request proceeded successfully.<br/>Here's the download link: <a href=\"{download_link}\">{download_link}</a><br/><br/>"
 
-        if big_error and not errors:
+        if errors:
+            html_content = html_content + f"The operation failed due to the following reason(s):<ul>{user_msg.message}</ul><br/>"
+
+        elif big_error:
             html_content = html_content + f"A major error happened. An admin has been immediately notified. <a href=\"mailto:{email_from}\">Please contact us</a>.<br/><br/>"
 
-        #elif errors:
-        #    html_content = html_content + f"The operation failed due to the following reason(s):<ul>{user_msg.message}</ul>"
-
         # If there was any warning
-        #if warnings:
-        #    html_content = html_content + f"Les avertissements suivants sont survenus:<ul>{english_warnings}</ul>"
+        if warnings:
+            html_content = html_content + f"Les avertissements suivants sont survenus:<ul>{english_warnings}</ul><br/>"
+
+        # Information on the job
+        colls_string = None
+        if colls:
+            for c in colls:
+                if not colls_string:
+                    colls_string = ""
+                colls_string = colls_string + f"<li>{c}</li>"
+        parameters = f"<li>JobID: {job_id}</li>"
+        #parameters = parameters + f"<li>Email: {email}</li>"
+        parameters = parameters + f"<li>Collections:<ul>{colls_string}</ul></li>"
+        parameters = parameters + f"<li>GeomWKT: {geom_wkt}</li>"
+        parameters = parameters + f"<li>GeomCRS: {geom_crs}</li>"
+        html_content = html_content + f"Information on the extraction:<ul>{parameters}</ul><br/>"
 
         # English closing
-        html_content = html_content + f"<br/><br/><div>Thanks,<br/>Clip Zip Ship Extractor Team<br/><i>Need help with your extraction? <a href=\"mailto:{email_from}\">Contact our team</a>.</i></div>"
+        html_content = html_content + f"<div>Thanks,<br/>Clip Zip Ship Extractor Team<br/><i>Need help with your extraction? <a href=\"mailto:{email_from}\">Contact our team</a>.</i></div>"
 
         # Global Footer
         html_footer_sent_to = f"<br/><br/>This message was automatically sent to <a href='mailto:{email}' style='color:#1b74e4;text-decoration:none' target='_blank'>{email}</a>"
 
         # Redirect
         return ExtractNRCanProcessor._send_emails_body_build(html_title, html_title_color, html_content, html_footer_sent_to)
+
+
+    @staticmethod
+    def _send_emails_body_admin(job_id: str, email: str, colls: list, geom_wkt: str, geom_crs: str, progress_marks: list, warnings: list, errors: list, big_error: Exception):
+
+        # Read the progress marks
+        #[english_log, french_log] = ExtractNRCanProcessor._combine_progress_marks_for_response(progress_marks, prefix="<li>", suffix="</li>")
+        [english_log, french_log] = [None, None]
+
+        # Read the warnings
+        #[english_warnings, french_warnings] = ExtractNRCanProcessor._combine_warnings_for_response(warnings, prefix="<li>", suffix="</li>")
+        [english_warnings, french_warnings] = [None, None]
+
+        # Titles
+        html_title_color = "#e80000"
+        html_title = "Échec de l'opération d'extraction / Failure of the extraction process"
+        html_content = f"<i>(English message follows)</i><br/>"
+
+        #
+        # French version
+        #
+        html_content = html_content + f"<br/>Bonjour à l'administrateur,<br/><br/>"
+
+        # If there's been a major error the user shouldn't necessary know the details
+        user_msg = None
+        if big_error:
+            html_content = html_content + f"Une erreur majeure est survenue. Voici le message seulement visible par un administrateur:<ul><li>{str(big_error)}</li></ul><br/>"
+
+        # If there's been an issue the user should be informed
+        if errors:
+            user_msg = ExtractNRCanProcessor._combine_exceptions_for_response(errors, admin=True, prefix="<li>", suffix="</li>")
+            html_content = html_content + f"Les erreurs suivantes sont survenues:<ul>{user_msg.message_fr}</ul><br/>"
+
+        # If there was any warning
+        if warnings:
+            html_content = html_content + f"Les avertissements suivants sont survenus:<ul>{french_warnings}</ul><br/>"
+
+        # Information on the job
+        colls_string = None
+        if colls:
+            for c in colls:
+                if not colls_string:
+                    colls_string = ""
+                colls_string = colls_string + f"<li>{c}</li>"
+        parameters = f"<li>JobID: {job_id}</li>"
+        #parameters = parameters + f"<li>Email: {email}</li>"
+        parameters = parameters + f"<li>Collections:<ul>{colls_string}</ul></li>"
+        parameters = parameters + f"<li>GeomWKT: {geom_wkt}</li>"
+        parameters = parameters + f"<li>GeomCRS: {geom_crs}</li>"
+        html_content = html_content + f"Information sur le traitement:<ul>{parameters}</ul><br/>"
+
+        # If log
+        if french_log:
+            html_content = html_content + f"<br/>Voici le log:<ul>{french_log}</ul><br/>"
+        html_content = html_content + "<br/>-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------<br/><br/>"
+
+
+        #
+        # English version
+        #
+        html_content = html_content + f"Hi administrator,<br/><br/>"
+
+        # If there's been a major error
+        if big_error:
+            html_content = html_content + f"A major error happened. Here's the message only visible to an admin:<ul><li>{str(big_error)}</li></ul><br/>"
+
+        # If there was any errors
+        if errors:
+            html_content = html_content + f"The following errors happened:<ul>{user_msg.message}</ul><br/>"
+
+        # If there was any warning
+        if warnings:
+            html_content = html_content + f"The following warnings happened:<ul>{english_warnings}</ul><br/>"
+
+        # Information on the job
+        colls_string = None
+        if colls:
+            for c in colls:
+                if not colls_string:
+                    colls_string = ""
+                colls_string = colls_string + f"<li>{c}</li>"
+        parameters = f"<li>JobID: {job_id}</li>"
+        #parameters = parameters + f"<li>Email: {email}</li>"
+        parameters = parameters + f"<li>Collections:<ul>{colls_string}</ul></li>"
+        parameters = parameters + f"<li>GeomWKT: {geom_wkt}</li>"
+        parameters = parameters + f"<li>GeomCRS: {geom_crs}</li>"
+        html_content = html_content + f"Information on the extraction:<ul>{parameters}</ul><br/>"
+
+        # If log
+        if english_log:
+            html_content = html_content + f"<br/>Here's the log:<ul>{english_log}</ul><br/>"
+
+        # Redirect
+        return ExtractNRCanProcessor._send_emails_body_build(html_title, html_title_color, html_content, "")
 
 
     @staticmethod
@@ -506,7 +742,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
                                                     <table border='0' width='100%' cellspacing='0' cellpadding='0' align='left' style='border-collapse:collapse'>
                                                         <tbody>
                                                             <tr>
-                                                                <td style='font-family:Helvetica Neue,Helvetica,Lucida Grande,tahoma,verdana,arial,sans-serif;font-size:11px;color:#aaaaaa;line-height:16px'>{html_footer_sent_to}.<br>DDR Publisher - National Resources Canada/Ressources Naturelles Canada</td>
+                                                                <td style='font-family:Helvetica Neue,Helvetica,Lucida Grande,tahoma,verdana,arial,sans-serif;font-size:11px;color:#aaaaaa;line-height:16px'>{html_footer_sent_to}.<br>DDR Extraction - National Resources Canada/Ressources Naturelles Canada</td>
                                                             </tr>
                                                         </tbody>
                                                     </table>
@@ -523,5 +759,104 @@ class ExtractNRCanProcessor(ExtractProcessor):
                 </div>
             """
 
+
+    @staticmethod
+    def _combine_exceptions_for_response(exceptions: list, *, admin: bool = False, prefix: str = "", suffix: str = os.linesep):
+        """
+        Loops on the exceptions and create a single UserMessageException which encompases all messages.
+        """
+
+        # For each exception
+        msg_english_total = ""
+        msg_french_total = ""
+        for e in exceptions:
+            [msg_english, msg_french] = ExtractNRCanProcessor._combine_exceptions_for_response_read_exception(e, admin)
+            msg_english_total = msg_english_total + prefix + msg_english + suffix
+            msg_french_total = msg_french_total + prefix + msg_french + suffix
+        msg_english_total = msg_english_total.strip(os.linesep)
+        msg_french_total = msg_french_total.strip(os.linesep)
+
+        return UserMessageException(500, msg_english_total, msg_french_total)
+
+
+    @staticmethod
+    def _combine_exceptions_for_response_read_exception(e, admin: bool = False):
+        """
+        """
+
+        if isinstance(e, EmailUndefinedException):
+            return [str(e),  # English message works fine
+                    f"Le paramètre d'entré 'email' n'est pas défini"]
+
+        elif isinstance(e, CollectionsUndefinedException):
+            return [str(e),  # English message works fine
+                    f"Le paramètre d'entré 'collections' n'est pas défini"]
+
+        elif isinstance(e, CollectionsNotFoundException):
+            return [str(e),  # English message works fine
+                    f"La collection {e.coll_name} n'existe pas"]
+
+        elif isinstance(e, ClippingAreaUndefinedException):
+            return [str(e),  # English message works fine
+                    f"Le paramètre d'entré 'geom' n'est pas défini"]
+
+        elif isinstance(e, ClippingAreaCrsUndefinedException):
+            return [str(e),  # English message works fine
+                    f"Le paramètre d'entré 'geom_crs' n'est pas défini"]
+
+        elif isinstance(e, ClippingAreaTooLargeException):
+            return [str(e),  # English message works fine
+                    f"L'aire d'extraction était {e.extract_area} km2 qui est plus grande que le maximum de {e.max_area} km2 pour {e.collection}"]
+
+        # If admin
+        if admin:
+            return [str(e), str(e)]
+
+        # Default
+        return ["A fatal error happened", "Une erreur fatale est survenue"]
+
+
     def __repr__(self):
         return f'<ExtractNRCanProcessor> {self.name}'
+
+
+class EmailUndefinedException(ProviderPreconditionFailed):
+    """Exception raised when no email is defined"""
+    def __init__(self):
+        super().__init__("Input parameter 'email' is undefined")
+
+
+class ClippingAreaTooLargeException(ProviderRequestEntityTooLargeError):
+    """Exception raised when no clipping area is too large"""
+    def __init__(self, collection: str, max_area: float, extract_area: float):
+        super().__init__(f"Clipping area was {extract_area} km2 which is greater than the maximum area of {max_area} km2 for {collection}")
+        self.collection = collection
+        self.max_area = max_area
+        self.extract_area = extract_area
+
+
+class UserMessageException(Exception):
+    """Exception raised when a message (likely an error message) needs to be sent to the User."""
+    def __init__(self, code, message, message_fr):
+        super(UserMessageException, self)
+        self.code = code
+        self.title = "Error"
+        if code == 500:
+            self.title = "Internal Server Error"
+        elif code == 400:
+            self.title = "Bad Request"
+        elif code == 401:
+            self.title = "Unauthorized"
+        elif code == 403:
+            self.title = "Forbidden"
+        elif code == 404:
+            self.title = "Not Found"
+        elif code == 405:
+            self.title = "Method Not Allowed"
+        elif code == 429:
+            self.title = "Too Many Requests"
+        self.message = message
+        self.message_fr = message_fr
+
+    def __str__(self):
+        return f"ENG: {self.message} | FR: {self.message_fr}"

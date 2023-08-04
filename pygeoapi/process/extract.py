@@ -139,6 +139,10 @@ class ExtractProcessor(BaseProcessor):
             process_metadata = PROCESS_METADATA
 
         super().__init__(processor_def, process_metadata)
+        self.colls = None
+        self.geom_wkt = None
+        self.geom_crs = None
+
 
     def get_collection_type(self, coll_name: str):
         # Read the configuration for it
@@ -147,6 +151,7 @@ class ExtractProcessor(BaseProcessor):
         # Get the collection type by its providers
         return self._get_collection_type_from_providers(c_conf['providers'])
 
+
     def get_collection_coverage_mimetype(self, coll_name: str):
         # Read the configuration for it
         c_conf = self.processor_def['collections'][coll_name]
@@ -154,50 +159,56 @@ class ExtractProcessor(BaseProcessor):
         # Get the collection type by its providers
         return self._get_collection_mimetype_image_from_providers(c_conf['providers'])
 
-    def execute(self, data):
+
+    def execute(self, data: dict):
         """
         Entry point of the execution process.
         """
 
-        # Read the input params
-        email = data['email']
-        geom = data['geom']
-        geom_crs = data['geom_crs']
-        colls = data['collections']
+        try:
+            # Validate inputs
+            if self.on_query_validate_inputs(data):
+                # Validate execution
+                if self.on_query_validate_execution(data):
+                    # For each collection to query
+                    query_res = {}
+                    i = 1
+                    message = "Collections:\n"
+                    for c in self.colls:
+                        # If running inside a job manager
+                        if self.process_manager:
+                            # The progression can be a value between 15 and 85 (<10 and >90 reserved by the process manager itself)
+                            prog_value = ((85 - 15) * i / len(self.colls)) + 15
+                            message = message + (" | " if i > 1 else "") + c
 
-        # Update the job progress
-        self.process_manager.update_job(self.job_id, {'collections': colls, 'email': email, 'geom': geom, 'geom_crs': geom_crs})
+                            # Update the job progress
+                            self.process_manager.update_job(self.job_id, {'message': message, 'progress': prog_value})
 
-        # Validate execution
-        if self.on_query_validate_execution(geom, geom_crs, colls):
-            # For each collection to query
-            query_res = {}
-            i = 1
-            message = "Collections:\n"
-            for c in colls:
-                # If running inside a job manager
-                if self.process_manager:
-                    # The progression can be a value between 15 and 85 (<10 and >90 reserved by the process manager itself)
-                    prog_value = ((85 - 15) * i / len(colls)) + 15
-                    message = message + (" | " if i > 1 else "") + c
+                        # Call on query with it which will query the collection based on its provider
+                        query_res[c] = self.on_query(c, self.geom_wkt, self.geom_crs)
 
-                    # Update the job progress
-                    self.process_manager.update_job(self.job_id, {'message': message, 'progress': prog_value})
+                        # Increment
+                        i = i+1
 
-                # Call on query with it which will query the collection based on its provider
-                query_res[c] = self.on_query(c, geom, geom_crs)
+                    # Finalize the results
+                    self.on_query_finalize(data, query_res)
 
-                # Increment
-                i = i+1
+                    # Return result
+                    return self.on_query_results(query_res)
 
-            # Finalize the results
-            self.on_query_finalize(data, query_res)
+                else:
+                    raise ProviderPreconditionFailed("Invalid execution parameters")
 
-            # Return result
-            return self.on_query_results(query_res)
+            else:
+                raise ProviderPreconditionFailed("Invalid input parameters")
 
-        else:
-            raise ProviderPreconditionFailed()
+        except Exception as err:
+            # Call on exception
+            self.on_exception(err)
+
+            # Keep raising error
+            raise err
+
 
     def on_query(self, coll_name: str, geom_wkt: str, geom_crs: int):
         """
@@ -247,11 +258,60 @@ class ExtractProcessor(BaseProcessor):
         # Return the query result
         return res
 
-    def on_query_validate_execution():
+
+    def on_query_validate_inputs(self, data: dict):
+        """
+        Override this method to perform validations of inputs
+        """
+
+        if "collections" in data and data['collections']:
+            # Store the collections
+            self.colls = data['collections']
+
+            # Check if each collection exists
+            for c in self.colls:
+                if not c in self.processor_def['collections']:
+                    # Error
+                    err = CollectionsNotFoundException(c)
+                    LOGGER.warning(err)
+                    raise err
+
+        else:
+            # Error
+            err = CollectionsUndefinedException()
+            LOGGER.warning(err)
+            raise err
+
+        if "geom" in data and data['geom']:
+            # Store the input geometry
+            self.geom_wkt = data['geom']
+
+        else:
+            # Error
+            err = ClippingAreaUndefinedException()
+            LOGGER.warning(err)
+            raise err
+
+        if "geom_crs" in data and data["geom_crs"]:
+            # Store the crs
+            self.geom_crs = data["geom_crs"]
+
+        else:
+            # Error
+            err = ClippingAreaCrsUndefinedException()
+            LOGGER.warning(err)
+            raise err
+
+        # All good
+        return True
+
+
+    def on_query_validate_execution(self, data: dict):
         """
         Override this method to perform validations pre-execution
         """
         return True
+
 
     def on_query_finalize(self, data: dict, query_res: dict):
         """
@@ -260,6 +320,7 @@ class ExtractProcessor(BaseProcessor):
 
         pass
 
+
     def on_query_results(self, query_res: dict):
         """
         Override this method to return something else than the default json of the results
@@ -267,6 +328,15 @@ class ExtractProcessor(BaseProcessor):
 
         # Return the query results
         return 'application/json', query_res
+
+
+    def on_exception(self, exception: Exception):
+        """
+        Override this method to do further things when an exception happened
+        """
+
+        pass
+
 
     @staticmethod
     def _get_collection_type_from_providers(providers: list):
@@ -278,6 +348,7 @@ class ExtractProcessor(BaseProcessor):
                 return "coverage"
         return None
 
+
     @staticmethod
     def _get_collection_mimetype_image_from_providers(providers: list):
         # For each provider
@@ -287,5 +358,31 @@ class ExtractProcessor(BaseProcessor):
                     return p['format']['mimetype']
         return None
 
+
     def __repr__(self):
         return f'<ExtractProcessor> {self.name}'
+
+
+class CollectionsUndefinedException(ProviderPreconditionFailed):
+    """Exception raised when no collections are defined"""
+    def __init__(self):
+        super().__init__("Input parameter 'collections' is undefined")
+
+
+class CollectionsNotFoundException(ProviderPreconditionFailed):
+    """Exception raised when a collection wasn't found"""
+    def __init__(self, coll_name: str):
+        self.coll_name = coll_name
+        super().__init__(f"Collection \"{coll_name}\" not found")
+
+
+class ClippingAreaUndefinedException(ProviderPreconditionFailed):
+    """Exception raised when no clipping area is defined"""
+    def __init__(self):
+        super().__init__("Input parameter 'geom' is undefined")
+
+
+class ClippingAreaCrsUndefinedException(ProviderPreconditionFailed):
+    """Exception raised when no clipping area is defined"""
+    def __init__(self):
+        super().__init__("Input parameter 'geom_crs' is undefined")
