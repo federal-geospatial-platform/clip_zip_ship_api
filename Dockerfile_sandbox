@@ -132,16 +132,16 @@ RUN \
     # Install pygeoapi
     && pip3 install -e . \
 
-    # Set default config and entrypoint for Docker Image
-    && cp /pygeoapi/docker/entrypoint.sh /entrypoint.sh  \
-    && cp /pygeoapi/local.config.${AWS_ENV}.yml /pygeoapi/local.config.yml \
-    && cp /pygeoapi/local.openapi.${AWS_ENV}.yml /pygeoapi/local.openapi.yml \
-
     # Cleanup TODO: remove unused Locales and TZs
     && apt-get remove --purge -y gcc ${DEB_BUILD_DEPS} \
     && apt-get clean \
     && apt autoremove -y  \
     && rm -rf /var/lib/apt/lists/*
+
+# Set default config and entrypoint for Docker Image
+COPY docker/entrypoint.sh /entrypoint.sh
+COPY local.config.${AWS_ENV}.yml /pygeoapi/local.config.yml
+COPY local.openapi.${AWS_ENV}.yml /pygeoapi/local.openapi.yml
 
 # Set permissions
 RUN chmod 1777 /pygeoapi && \
