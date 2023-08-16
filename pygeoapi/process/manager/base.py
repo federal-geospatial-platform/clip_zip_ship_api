@@ -210,13 +210,6 @@ class BaseManager:
                   and JobStatus.accepted (i.e. initial job status)
         """
 
-        #print("_execute_handler_async")
-
-        #res = self.pool.submit(self._execute_handler_sync, args=(p, job_id, data_dict,))
-        #print(res)
-        #res = self.pool.apply_async(self._execute_handler_sync, args=(p, job_id, data_dict,))
-        #result = res.get()
-
         # If limiting the queue
         if self.max_queue > 0:
             # Check if over
@@ -248,7 +241,6 @@ class BaseManager:
         :returns: tuple of MIME type, response payload and status
         """
 
-        #print("_execute_handler_sync")
         process_id = p.metadata['id']
         current_status = JobStatus.accepted
         message = 'Job accepted'

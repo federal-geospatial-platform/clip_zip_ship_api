@@ -1,4 +1,4 @@
-# =================================================================
+﻿# =================================================================
 #
 # Authors: Alexandre Roy <alexandre.roy@nrcan-rncan.gc.ca>
 #
@@ -27,13 +27,11 @@
 #
 # =================================================================
 
-import os, logging
-from psycopg2 import sql
-from xml.etree import cElementTree as ET
+import logging
 
-from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
-from pygeoapi.provider.base import ProviderQueryError, ProviderPreconditionFailed
-from pygeoapi.util import (get_provider_by_type, to_json)
+from pygeoapi.process.base import BaseProcessor
+from pygeoapi.provider.base import ProviderPreconditionFailed
+from pygeoapi.util import get_provider_by_type
 from pygeoapi.plugin import load_plugin
 
 

@@ -28,15 +28,14 @@
 # =================================================================
 
 
-from contextlib import contextmanager
-import json, logging
+import json
+import logging
 from pathlib import Path
-from typing import Any, Tuple
+from typing import (Any, Tuple)
 
 import psycopg2
 import psycopg2.extras
 from psycopg2 import sql
-from pygeoapi import api_aws
 
 from pygeoapi.process.base import (
     JobNotFoundError,
@@ -245,8 +244,6 @@ class PostgresDBManager(BaseManager):
         job_result = self.get_job(job_id)
 
         if job_result:
-            location = job_result[self.table_jobs['field_location']]
-
             with self.open_conn() as conn:
                 # Open a cursor
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -263,7 +260,7 @@ class PostgresDBManager(BaseManager):
                 conn.commit()
                 return True
         else:
-             raise JobNotFoundError()
+            raise JobNotFoundError()
 
     def get_job(self, job_id: str) -> dict:
         """
@@ -319,6 +316,9 @@ class PostgresDBManager(BaseManager):
             if job_status == JobStatus.successful:
                 # Read the mimetype
                 mimetype = job_result[self.table_jobs['field_mimetype']]
+
+                # Read the location
+                location = job_result[self.table_jobs['field_location']]
 
                 # If the job is in the database
                 if self.result_in_db:
