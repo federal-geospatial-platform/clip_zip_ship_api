@@ -34,7 +34,6 @@ from datetime import datetime
 import json
 import logging
 import multiprocessing
-#import concurrent.futures
 from multiprocessing import dummy
 from pathlib import Path
 from typing import Any, Dict, Tuple, Optional, OrderedDict
@@ -58,7 +57,6 @@ from pygeoapi.provider.base import (
     ProviderRequestEntityTooLargeError
 )
 LOGGER = logging.getLogger(__name__)
-
 
 
 class BaseManager:
@@ -460,11 +458,12 @@ class BaseManager:
     def __repr__(self):
         return f'<BaseManager> {self.name}'
 
+
 def get_manager(config: Dict) -> BaseManager:
-    """Instantiate process manager from the supplied configuration.
+    """
+    Instantiate process manager from the supplied configuration.
 
     :param config: pygeoapi configuration
-
     :returns: The pygeoapi process manager object
     """
     manager_conf = config.get('server', {}).get(
