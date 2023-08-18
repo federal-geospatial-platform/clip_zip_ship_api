@@ -32,6 +32,7 @@ from typing import Any, Tuple
 
 LOGGER = logging.getLogger(__name__)
 
+
 class BaseProcessor:
     """
     Generic Processor ABC. Processes are inherited from this class
@@ -70,25 +71,32 @@ class BaseProcessor:
     def __repr__(self):
         return f'<BaseProcessor> {self.name}'
 
+
 class ProcessorGenericError(Exception):
     """processor generic error"""
     pass
+
 
 class ProcessorExecuteError(ProcessorGenericError):
     """query / backend error"""
     pass
 
+
 class JobError(Exception):
     pass
+
 
 class JobNotFoundError(JobError):
     pass
 
+
 class JobResultNotFoundError(JobError):
     pass
 
+
 class ProcessError(Exception):
     pass
+
 
 class UnknownProcessError(ProcessError):
     pass

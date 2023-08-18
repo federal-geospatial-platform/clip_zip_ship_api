@@ -124,9 +124,10 @@ class ExtractProcessor(BaseProcessor):
 
     def __init__(self, processor_def, process_metadata):
         """
-        Initialize object
+        Initialize the Extract Processor
 
         :param processor_def: provider definition
+        :param process_metadata: process metadata
 
         :returns: pygeoapi.process.extract.ExtractProcessor
         """
@@ -142,6 +143,15 @@ class ExtractProcessor(BaseProcessor):
         self.out_crs = None
 
     def get_collection_type(self, coll_name: str):
+        """
+        Return the collection type given its collection name by reading the
+        internal processor definition configuration.
+
+        :param coll_name: the collection name
+
+        :returns: the collection type
+        """
+
         # Read the configuration for it
         c_conf = self.processor_def['collections'][coll_name]
 
@@ -149,6 +159,15 @@ class ExtractProcessor(BaseProcessor):
         return self._get_collection_type_from_providers(c_conf['providers'])
 
     def get_collection_coverage_mimetype(self, coll_name: str):
+        """
+        Return the collection coverage mimetype given its collection name
+        by reading the internal processor definition configuration.
+
+        :param coll_name: the collection name
+
+        :returns: the collection coverage mimetype
+        """
+
         # Read the configuration for it
         c_conf = self.processor_def['collections'][coll_name]
 
@@ -159,6 +178,10 @@ class ExtractProcessor(BaseProcessor):
     def execute(self, data: dict):
         """
         Entry point of the execution process.
+
+        :param data: the input parameters, as-received, for the process
+
+        :returns: results of the process as provided by 'on_query_results'
         """
 
         try:
@@ -215,12 +238,15 @@ class ExtractProcessor(BaseProcessor):
             # Keep raising error
             raise err
 
-
     def on_query(self, coll_name: str, geom_wkt: str, geom_crs: int, out_crs: int):  # noqa
         """
         Overridable function to query a particular collection given its name.
-        One trick here is that the collections in processor_def must be a
-        deepcopy of the ressources from the API configuration.
+
+        :param coll_name: the collection name to extract, validated
+        :param geom_wkt: the geometry wkt, validated
+        :param geom_crs: the geometry crs, validated
+
+        :returns: results of the process as provided by 'on_query_results'
         """
 
         # Read the configuration for it
@@ -277,14 +303,19 @@ class ExtractProcessor(BaseProcessor):
 
         else:
             res = None
-            pass # Skip, unsupported
+            pass  # Skip, unsupported
 
         # Return the query result
         return res
 
     def on_query_validate_inputs(self, data: dict):
         """
-        Override this method to perform validations of inputs
+        Override this method to perform input validations.
+
+        :param data: the input parameters, as-received, for the process
+
+        :returns: returns True when inputs were all valid. Otherwise raises
+        an exception.
         """
 
         if "collections" in data and data['collections']:
@@ -293,7 +324,7 @@ class ExtractProcessor(BaseProcessor):
 
             # Check if each collection exists
             for c in self.colls:
-                if not c in self.processor_def['collections']:
+                if c not in self.processor_def['collections']:
                     # Error
                     err = CollectionsNotFoundException(c)
                     LOGGER.warning(err)
@@ -345,20 +376,34 @@ class ExtractProcessor(BaseProcessor):
 
     def on_query_validate_execution(self, data: dict):
         """
-        Override this method to perform validations pre-execution
+        Override this method to perform pre-execution validations
+
+        :param data: the input parameters, as-received, for the process
+
+        :returns: returns True when execution is good to go.
         """
+
+        # All good
         return True
 
     def on_query_finalize(self, data: dict, query_res: dict):
         """
-        Override this method to do further things with the queried results
+        Override this method to do further things with the extracted results
+        of each collection.
+
+        :param data: the input parameters, as-received, for the process
+        :param query_res: the extraction results of each collection
         """
         pass
 
     def on_query_results(self, query_res: dict):
         """
-        Override this method to return something else than the default json
-        of the results
+        Override this method to return something else than the results
+        as json.
+
+        :param query_res: the extraction results of each collection
+
+        :returns: returns the results as json
         """
 
         # Return the query results
@@ -366,13 +411,19 @@ class ExtractProcessor(BaseProcessor):
 
     def on_exception(self, exception: Exception):
         """
-        Override this method to do further things when an exception happened
+        Override this method to do further things when an exception happened.
+
+        :param exception: the exception which happened
         """
 
         pass
 
     @staticmethod
     def _get_collection_type_from_providers(providers: list):
+        """
+        Utility function to get a collection type from the providers list.
+        """
+
         # For each provider
         for p in providers:
             if p['type'] == "feature":
@@ -383,6 +434,10 @@ class ExtractProcessor(BaseProcessor):
 
     @staticmethod
     def _get_collection_mimetype_image_from_providers(providers: list):
+        """
+        Utility function to get a coverage mimetype from the providers list.
+        """
+
         # For each provider
         for p in providers:
             if p['type'] == "coverage":
@@ -393,10 +448,12 @@ class ExtractProcessor(BaseProcessor):
     def __repr__(self):
         return f'<ExtractProcessor> {self.name}'
 
+
 class CollectionsUndefinedException(ProviderPreconditionFailed):
     """Exception raised when no collections are defined"""
     def __init__(self):
         super().__init__("Input parameter 'collections' is undefined")
+
 
 class CollectionsNotFoundException(ProviderPreconditionFailed):
     """Exception raised when a collection wasn't found"""
@@ -404,10 +461,12 @@ class CollectionsNotFoundException(ProviderPreconditionFailed):
         self.coll_name = coll_name
         super().__init__(f"Collection \"{coll_name}\" not found")
 
+
 class ClippingAreaUndefinedException(ProviderPreconditionFailed):
     """Exception raised when no clipping area is defined"""
     def __init__(self):
         super().__init__("Input parameter 'geom' is undefined")
+
 
 class ClippingAreaCrsUndefinedException(ProviderPreconditionFailed):
     """Exception raised when no clipping area is defined"""
