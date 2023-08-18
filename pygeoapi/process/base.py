@@ -32,7 +32,6 @@ from typing import Any, Tuple
 
 LOGGER = logging.getLogger(__name__)
 
-
 class BaseProcessor:
     """generic Processor ABC. Processes are inherited from this class"""
 
@@ -51,7 +50,8 @@ class BaseProcessor:
 
     def set_process_manager(self, process_manager, job_id: str):
         """
-        When the process is executed inside a manager, this method references the manager so that the process can update its progression.
+        When the process is executed inside a manager, this method references
+        the manager so that the process can update its progression.
         """
         self.process_manager = process_manager
         self.job_id = job_id
@@ -71,32 +71,25 @@ class BaseProcessor:
     def __repr__(self):
         return f'<BaseProcessor> {self.name}'
 
-
 class ProcessorGenericError(Exception):
     """processor generic error"""
     pass
-
 
 class ProcessorExecuteError(ProcessorGenericError):
     """query / backend error"""
     pass
 
-
 class JobError(Exception):
     pass
-
 
 class JobNotFoundError(JobError):
     pass
 
-
 class JobResultNotFoundError(JobError):
     pass
 
-
 class ProcessError(Exception):
     pass
-
 
 class UnknownProcessError(ProcessError):
     pass

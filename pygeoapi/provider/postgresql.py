@@ -198,6 +198,11 @@ class PostgreSQLProvider(BaseProvider):
             else:
                 returned = matched
 
+            out_crs = self.srid
+            crs_transform_out = self._get_crs_transform(crs_transform_spec)
+            if crs_transform_out:
+                out_crs = pyproj.CRS.from_wkt(crs_transform_spec.target_crs_wkt).to_epsg()
+
             LOGGER.debug(f'Found {matched} result(s)')
 
             LOGGER.debug('Preparing response')
@@ -209,7 +214,7 @@ class PostgreSQLProvider(BaseProvider):
                 'crs': {
                     'type': 'name',
                     'properties': {
-                        'name': f'urn:ogc:def:crs:EPSG::{self.srid}'
+                        'name': f'urn:ogc:def:crs:EPSG::{out_crs}'
                     }
                 }
             }
@@ -217,15 +222,17 @@ class PostgreSQLProvider(BaseProvider):
             if resulttype == "hits" or not results:
                 response['numberReturned'] = 0
                 return response
-            crs_transform_out = self._get_crs_transform(crs_transform_spec)
             for item in results.limit(limit):
                 if clip > 0 and geom_wkt:
                     # Default to feature, with item[0]
                     obj = self._sqlalchemy_to_feature(item[0], crs_transform_out)
 
-                    # Do more with say item[1], item[2], ...
+                    # Do more with say item[1] (clipped geometry)
                     shapely_geom = to_shape(item[1])
+                    if crs_transform_out is not None:
+                        shapely_geom = crs_transform_out(shapely_geom)
                     geojson_geom = shapely.geometry.mapping(shapely_geom)
+
                     if clip == 2:
                         # Store as enhanced attribute in the geojson
                         obj['geometry_clipped'] = geojson_geom

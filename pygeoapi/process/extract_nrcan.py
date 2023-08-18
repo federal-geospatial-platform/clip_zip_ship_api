@@ -36,7 +36,8 @@ from pygeoapi.process.extract import (
     CollectionsUndefinedException,
     CollectionsNotFoundException,
     ClippingAreaUndefinedException,
-    ClippingAreaCrsUndefinedException
+    ClippingAreaCrsUndefinedException,
+    OutputCRSNotANumberException
 )
 from pygeoapi import api_aws
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
@@ -209,6 +210,21 @@ class ExtractNRCanProcessor(ExtractProcessor):
             self.errors.append(err)
             LOGGER.warning(err)
 
+        if "out_crs" in data and data["out_crs"]:
+            # If a number
+            if data["out_crs"].isdigit():
+                # Store the crs
+                self.out_crs = int(data["out_crs"])
+
+            else:
+                err = OutputCRSNotANumberException()
+                self.errors.append(err)
+                LOGGER.warning(err)
+
+        else:
+            # Optional parameter, all good
+            pass
+
         # Update the job with the received parameters
         # Obfuscate the email
         email = self.email
@@ -305,7 +321,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         self.send_emails(self.processor_def['settings']['email'], self.job_id, self.email, self.colls, self.geom_wkt, self.geom_crs, self.extract_url, [], self.errors, None)
 
         # Now that it's copied on S3, delete local
-        #shutil.rmtree(f"./{EXTRACT_FOLDER}/{unique_key}", ignore_errors=True)
+        shutil.rmtree(f"./{EXTRACT_FOLDER}/{unique_key}", ignore_errors=True)
 
 
     def on_exception(self, exception: Exception):
@@ -807,6 +823,10 @@ class ExtractNRCanProcessor(ExtractProcessor):
         elif isinstance(e, ClippingAreaTooLargeException):
             return [str(e),  # English message works fine
                     f"L'aire d'extraction était {e.extract_area} km2 qui est plus grande que le maximum de {e.max_area} km2 pour {e.collection}"]
+
+        elif isinstance(e, OutputCRSNotANumberException):
+            return [str(e),  # English message works fine
+                    f"Le paramètre d'entré 'out_crs' n'est pas un nombre"]
 
         # If admin
         if admin:

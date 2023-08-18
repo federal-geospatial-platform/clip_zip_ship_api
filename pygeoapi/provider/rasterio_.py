@@ -32,6 +32,8 @@ import logging
 from pyproj import CRS, Transformer
 import rasterio
 from rasterio.io import MemoryFile
+from rasterio.warp import (reproject, calculate_default_transform)
+from rasterio.enums import Resampling
 import rasterio.mask
 
 from pygeoapi.provider.base import (BaseProvider, ProviderConnectionError,
@@ -163,7 +165,7 @@ class RasterioProvider(BaseProvider):
         return rangetype
 
     def query(self, properties=[], subsets={}, bbox=None, bbox_crs=4326,
-              geom=None, geom_crs=4326,
+              geom=None, geom_crs: int=4326, out_crs: int=None,
               datetime_=None, format_='json', **kwargs):
         """
         Extract data from collection
@@ -173,6 +175,7 @@ class RasterioProvider(BaseProvider):
         :param bbox_crs: bounding box crs
         :param geom: geometry as wkt
         :param geom_crs: geometry crs
+        :param out_crs: output crs when expecting a reprojection
         :param datetime_: temporal (datestamp or extent)
         :param format_: data format of output
 
@@ -359,19 +362,62 @@ class RasterioProvider(BaseProvider):
 
             out_meta['units'] = _data.units
 
+            # If returning json
+            if format_ == 'json':
+                LOGGER.debug('Creating output in CoverageJSON')
+                out_meta['bands'] = args['indexes']
+                return self.gen_covjson(out_meta, out_image)
+
+            # Serialize in memory to return data in native format
             LOGGER.debug('Serializing data in memory')
-            with MemoryFile() as memfile:
-                with memfile.open(**out_meta) as dest:
-                    dest.write(out_image)
 
-                if format_ == 'json':
-                    LOGGER.debug('Creating output in CoverageJSON')
-                    out_meta['bands'] = args['indexes']
-                    return self.gen_covjson(out_meta, out_image)
+            # If we have to reproject the image to another destination CRS
+            if out_crs:
+                # Use another MemoryFile to do a reprojection
+                LOGGER.debug('Returning data in native format and reprojected')
+                with MemoryFile() as memfile:
+                    with memfile.open(**out_meta) as dest:
+                        # Write the result
+                        dest.write(out_image)
 
-                else:  # return data in native format
-                    LOGGER.debug('Returning data in native format')
+                        # Create destination memory file
+                        with MemoryFile() as memfile_proj:
+                            # Reproject
+                            self.reproject_data_to_memory_file(dest, memfile_proj, out_crs)
+
+                            # Return the reprojected image
+                            return memfile_proj.read()
+
+            else:
+                # Use a single memory file and return as is
+                LOGGER.debug('Returning data in native format and native projection')
+                with MemoryFile() as memfile:
+                    with memfile.open(**out_meta) as dest:
+                        dest.write(out_image)
                     return memfile.read()
+
+    def reproject_data_to_memory_file(self, dataset_src, memoryfile_dest: MemoryFile, out_crs: int):
+        # Create the CRS
+        crs = rasterio.CRS({'init': f'EPSG:{out_crs}'})
+        transform, width, height = calculate_default_transform(dataset_src.crs, crs, dataset_src.width, dataset_src.height, *dataset_src.bounds)
+        kwargs = dataset_src.meta.copy()
+
+        kwargs.update({
+            'crs': crs,
+            'transform': transform,
+            'width': width,
+            'height': height})
+
+        with memoryfile_dest.open(**kwargs) as dest_proj:
+            for i in range(1, dataset_src.count + 1):
+                reproject(
+                    source=rasterio.band(dataset_src, i),
+                    destination=rasterio.band(dest_proj, i),
+                    src_transform=dataset_src.transform,
+                    src_crs=dataset_src.crs,
+                    dst_transform=transform,
+                    dst_crs=crs,
+                    resampling=Resampling.nearest)
 
     def gen_covjson(self, metadata, data):
         """

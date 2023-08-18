@@ -31,12 +31,10 @@ import logging
 
 from pygeoapi.process.base import BaseProcessor
 from pygeoapi.provider.base import ProviderPreconditionFailed
-from pygeoapi.util import get_provider_by_type
+from pygeoapi.util import (get_provider_by_type, get_crs_from_uri, CrsTransformSpec)
 from pygeoapi.plugin import load_plugin
 
-
 LOGGER = logging.getLogger(__name__)
-
 
 #: Process metadata and description
 PROCESS_METADATA = {
@@ -47,8 +45,8 @@ PROCESS_METADATA = {
         'fr': 'Extrait les données'
     },
     'description': {
-        'en': 'This process takes a list of collections, a geometry wkt and crs as inputs and proceeds to extract the records of all collections.',
-        'fr': 'Ce processus prend une liste de collections, une géométrie en format wkt avec un crs et extrait les enregistrements de toutes les collections.',
+        'en': 'This process takes a list of collections, a geometry wkt and crs as inputs and proceeds to extract the records of all collections.',  # noqa
+        'fr': 'Ce processus prend une liste de collections, une géométrie en format wkt avec un crs et extrait les enregistrements de toutes les collections.',  # noqa
     },
     'jobControlOptions': ['sync-execute', 'async-execute'],
     'keywords': ['extract'],
@@ -62,7 +60,7 @@ PROCESS_METADATA = {
     'inputs': {
         'collections': {
             'title': 'An array of collection names to extract records from',
-            'description': 'An array of collection names to extract records from',
+            'description': 'An array of collection names to extract records from',  # noqa
             'schema': {
                 'type': 'string'
             },
@@ -97,7 +95,7 @@ PROCESS_METADATA = {
     'outputs': {
         'echo': {
             'title': 'The url to the zip file containing the information',
-            'description': 'The url to the zip file containing the information',
+            'description': 'The url to the zip file containing the information',  # noqa
             'schema': {
                 'type': 'object',
                 'contentMediaType': 'application/json'
@@ -110,7 +108,7 @@ PROCESS_METADATA = {
                 "coll_name_1",
                 "coll_name_2"
             ],
-            "geom": "POLYGON((-72.3061 45.3656, -72.3061 45.9375, -71.7477 45.9375, -71.7477 45.3656, -72.3061 45.3656))",
+            "geom": "POLYGON((-72.3061 45.3656, -72.3061 45.9375, -71.7477 45.9375, -71.7477 45.3656, -72.3061 45.3656))",  # noqa
             "geom_crs": 4326
         }
     }
@@ -119,8 +117,9 @@ PROCESS_METADATA = {
 
 class ExtractProcessor(BaseProcessor):
     """
-    Extract Processor used to query multiple collections, of various providers, at the same time.
-    In this iteration, only collection types feature and coverage are supported, but the logic could be scaled up.
+    Extract Processor used to query multiple collections, of various
+    providers, at the same time. In this iteration, only collection types
+    feature and coverage are supported, but the logic could be scaled up.
     """
 
     def __init__(self, processor_def, process_metadata):
@@ -140,7 +139,7 @@ class ExtractProcessor(BaseProcessor):
         self.colls = None
         self.geom_wkt = None
         self.geom_crs = None
-
+        self.out_crs = None
 
     def get_collection_type(self, coll_name: str):
         # Read the configuration for it
@@ -149,14 +148,13 @@ class ExtractProcessor(BaseProcessor):
         # Get the collection type by its providers
         return self._get_collection_type_from_providers(c_conf['providers'])
 
-
     def get_collection_coverage_mimetype(self, coll_name: str):
         # Read the configuration for it
         c_conf = self.processor_def['collections'][coll_name]
 
         # Get the collection type by its providers
-        return self._get_collection_mimetype_image_from_providers(c_conf['providers'])
-
+        return self._get_collection_mimetype_image_from_providers(
+            c_conf['providers'])
 
     def execute(self, data: dict):
         """
@@ -175,15 +173,25 @@ class ExtractProcessor(BaseProcessor):
                     for c in self.colls:
                         # If running inside a job manager
                         if self.process_manager:
-                            # The progression can be a value between 15 and 85 (<10 and >90 reserved by the process manager itself)
-                            prog_value = ((85 - 15) * i / len(self.colls)) + 15
+                            # The progression can be a value between 15 and 85
+                            # (<10 and >90 reserved by the process manager
+                            # itself)
+                            prog_value = ((85 - 15) * i / len(self.colls)) + 15  # noqa
                             message = message + (" | " if i > 1 else "") + c
 
                             # Update the job progress
-                            self.process_manager.update_job(self.job_id, {'message': message, 'progress': prog_value})
+                            self.process_manager.update_job(
+                                self.job_id, {
+                                    'message': message,
+                                    'progress': prog_value
+                                })
 
-                        # Call on query with it which will query the collection based on its provider
-                        query_res[c] = self.on_query(c, self.geom_wkt, self.geom_crs)
+                        # Call on query with it which will query the
+                        # collection based on its provider
+                        query_res[c] = self.on_query(c,
+                                                     self.geom_wkt,
+                                                     self.geom_crs,
+                                                     self.out_crs)
 
                         # Increment
                         i = i+1
@@ -195,7 +203,7 @@ class ExtractProcessor(BaseProcessor):
                     return self.on_query_results(query_res)
 
                 else:
-                    raise ProviderPreconditionFailed("Invalid execution parameters")
+                    raise ProviderPreconditionFailed("Invalid execution parameters")  # noqa
 
             else:
                 raise ProviderPreconditionFailed("Invalid input parameters")
@@ -208,11 +216,11 @@ class ExtractProcessor(BaseProcessor):
             raise err
 
 
-    def on_query(self, coll_name: str, geom_wkt: str, geom_crs: int):
+    def on_query(self, coll_name: str, geom_wkt: str, geom_crs: int, out_crs: int):  # noqa
         """
         Overridable function to query a particular collection given its name.
-        One trick here is that the collections in processor_def must be a deepcopy of the
-        ressources from the API configuration.
+        One trick here is that the collections in processor_def must be a
+        deepcopy of the ressources from the API configuration.
         """
 
         # Read the configuration for it
@@ -229,8 +237,25 @@ class ExtractProcessor(BaseProcessor):
 
         # If the collection has a provider of type feature
         if c_type == "feature":
+            crs_trans_spec = None
+            if out_crs:
+                # To create the CrsTransformSpec
+                source_uri = f'http://www.opengis.net/def/crs/EPSG/0/{p.srid}'  # noqa
+                source_crs = get_crs_from_uri(source_uri)
+                target_uri = f'http://www.opengis.net/def/crs/EPSG/0/{out_crs}'  # noqa
+                target_crs = get_crs_from_uri(target_uri)
+
+                # The crs transform spec
+                crs_trans_spec = CrsTransformSpec(
+                    source_crs_uri= source_uri,
+                    source_crs_wkt= source_crs.to_wkt(),
+                    target_crs_uri= target_uri,
+                    target_crs_wkt= target_crs.to_wkt()
+                )
+
             # Query using the provider logic and clip = True!
-            res = p.query(offset=0, limit=self.processor_def['server']['limit'],
+            res = p.query(offset=0,
+                          limit=self.processor_def['server']['limit'],
                           resulttype='results', bbox=None,
                           bbox_crs=None, geom_wkt=geom_wkt, geom_crs=geom_crs,
                           datetime_=None, properties=[],
@@ -238,14 +263,15 @@ class ExtractProcessor(BaseProcessor):
                           select_properties=[],
                           skip_geometry=False,
                           q=None, language='en', filterq=None,
-                          clip=1)
+                          crs_transform_spec=crs_trans_spec, clip=1)
 
         elif c_type == "coverage":
             # Query using the provider logic
             query_args = {
                 'geom': geom_wkt,
                 'geom_crs': geom_crs,
-                'format_': 'native'
+                'format_': 'native',
+                'out_crs': out_crs
             }
             res = p.query(**query_args)
 
@@ -255,7 +281,6 @@ class ExtractProcessor(BaseProcessor):
 
         # Return the query result
         return res
-
 
     def on_query_validate_inputs(self, data: dict):
         """
@@ -300,9 +325,23 @@ class ExtractProcessor(BaseProcessor):
             LOGGER.warning(err)
             raise err
 
+        if "out_crs" in data and data["out_crs"]:
+            # If a number
+            if data["out_crs"].isdigit():
+                # Store the crs
+                self.out_crs = int(data["out_crs"])
+
+            else:
+                err = OutputCRSNotANumberException()
+                LOGGER.warning(err)
+                raise err
+
+        else:
+            # Optional parameter, all good
+            pass
+
         # All good
         return True
-
 
     def on_query_validate_execution(self, data: dict):
         """
@@ -310,23 +349,20 @@ class ExtractProcessor(BaseProcessor):
         """
         return True
 
-
     def on_query_finalize(self, data: dict, query_res: dict):
         """
         Override this method to do further things with the queried results
         """
-
         pass
-
 
     def on_query_results(self, query_res: dict):
         """
-        Override this method to return something else than the default json of the results
+        Override this method to return something else than the default json
+        of the results
         """
 
         # Return the query results
         return 'application/json', query_res
-
 
     def on_exception(self, exception: Exception):
         """
@@ -334,7 +370,6 @@ class ExtractProcessor(BaseProcessor):
         """
 
         pass
-
 
     @staticmethod
     def _get_collection_type_from_providers(providers: list):
@@ -346,7 +381,6 @@ class ExtractProcessor(BaseProcessor):
                 return "coverage"
         return None
 
-
     @staticmethod
     def _get_collection_mimetype_image_from_providers(providers: list):
         # For each provider
@@ -356,16 +390,13 @@ class ExtractProcessor(BaseProcessor):
                     return p['format']['mimetype']
         return None
 
-
     def __repr__(self):
         return f'<ExtractProcessor> {self.name}'
-
 
 class CollectionsUndefinedException(ProviderPreconditionFailed):
     """Exception raised when no collections are defined"""
     def __init__(self):
         super().__init__("Input parameter 'collections' is undefined")
-
 
 class CollectionsNotFoundException(ProviderPreconditionFailed):
     """Exception raised when a collection wasn't found"""
@@ -373,14 +404,17 @@ class CollectionsNotFoundException(ProviderPreconditionFailed):
         self.coll_name = coll_name
         super().__init__(f"Collection \"{coll_name}\" not found")
 
-
 class ClippingAreaUndefinedException(ProviderPreconditionFailed):
     """Exception raised when no clipping area is defined"""
     def __init__(self):
         super().__init__("Input parameter 'geom' is undefined")
 
-
 class ClippingAreaCrsUndefinedException(ProviderPreconditionFailed):
     """Exception raised when no clipping area is defined"""
     def __init__(self):
         super().__init__("Input parameter 'geom_crs' is undefined")
+
+class OutputCRSNotANumberException(ProviderPreconditionFailed):
+    """Exception raised when output crs isn't a number"""
+    def __init__(self):
+        super().__init__("Input parameter 'out_crs' is not a number")
