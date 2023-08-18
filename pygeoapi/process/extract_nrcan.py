@@ -212,7 +212,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
         if "out_crs" in data and data["out_crs"]:
             # If a number
-            if data["out_crs"].isdigit():
+            if isinstance(data["out_crs"], int) or data["out_crs"].isdigit():
                 # Store the crs
                 self.out_crs = int(data["out_crs"])
 
@@ -318,10 +318,10 @@ class ExtractNRCanProcessor(ExtractProcessor):
         self.extract_url = f"{self.processor_def['settings']['extract_url']}{os.path.basename(dest_zip)}"
 
         # Send email
-        self.send_emails(self.processor_def['settings']['email'], self.job_id, self.email, self.colls, self.geom_wkt, self.geom_crs, self.extract_url, [], self.errors, None)
+        self.send_emails(self.processor_def['settings']['email'], self.job_id, self.email, self.colls, self.geom_wkt, self.geom_crs, self.out_crs, self.extract_url, [], self.errors, None)
 
         # Now that it's copied on S3, delete local
-        shutil.rmtree(f"./{EXTRACT_FOLDER}/{unique_key}", ignore_errors=True)
+        #shutil.rmtree(f"./{EXTRACT_FOLDER}/{unique_key}", ignore_errors=True)
 
 
     def on_exception(self, exception: Exception):
@@ -331,7 +331,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
         # Try sending an email
         try:
-            self.send_emails(self.processor_def['settings']['email'], self.job_id, self.email, self.colls, self.geom_wkt, self.geom_crs, self.extract_url, [], self.errors, exception)
+            self.send_emails(self.processor_def['settings']['email'], self.job_id, self.email, self.colls, self.geom_wkt, self.geom_crs, self.out_crs, self.extract_url, [], self.errors, exception)
 
         except:
             # Continue
@@ -451,7 +451,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
 
     @staticmethod
-    def send_emails(email_config: dict, job_id: str, email: str, colls: list, geom_wkt: str, geom_crs: str, download_link: str, warnings: list, errors: list, big_error: Exception):
+    def send_emails(email_config: dict, job_id: str, email: str, colls: list, geom_wkt: str, geom_crs: str, out_crs: int, download_link: str, warnings: list, errors: list, big_error: Exception):
         """
         Sends an email
         """
@@ -460,7 +460,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         if email:
             # Prepare the email
             message = emails.html(
-                html=ExtractNRCanProcessor._send_emails_body_user(job_id, email, colls, geom_wkt, geom_crs, download_link, email_config['from'], warnings, errors, big_error),
+                html=ExtractNRCanProcessor._send_emails_body_user(job_id, email, colls, geom_wkt, geom_crs, out_crs, download_link, email_config['from'], warnings, errors, big_error),
                 subject="Résultat de votre requête d'extraction / Result of your extraction request",
                 mail_from=email_config['from']
             )
@@ -487,7 +487,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         if errors or big_error:
             # Prepare the email
             message = emails.html(
-                html=ExtractNRCanProcessor._send_emails_body_admin(job_id, email, colls, geom_wkt, geom_crs, [], warnings, errors, big_error),
+                html=ExtractNRCanProcessor._send_emails_body_admin(job_id, email, colls, geom_wkt, geom_crs, out_crs, [], warnings, errors, big_error),
                 subject="Résultat d'une requête d'extraction / Result of an extraction request",
                 mail_from=email_config['from']
             )
@@ -507,7 +507,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
 
     @staticmethod
-    def _send_emails_body_user(job_id: str, email: str, colls: list, geom_wkt: str, geom_crs: str, download_link: str, email_from: str, warnings: list, errors: list, big_error: Exception):
+    def _send_emails_body_user(job_id: str, email: str, colls: list, geom_wkt: str, geom_crs: str, out_crs: int, download_link: str, email_from: str, warnings: list, errors: list, big_error: Exception):
 
         # Read the warnings
         [english_warnings, french_warnings] = [None, None]
@@ -555,6 +555,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         parameters = parameters + f"<li>Collections:<ul>{colls_string}</ul></li>"
         parameters = parameters + f"<li>GeomWKT: {geom_wkt}</li>"
         parameters = parameters + f"<li>GeomCRS: {geom_crs}</li>"
+        parameters = parameters + f"<li>OutCRS: {out_crs}</li>"
         html_content = html_content + f"Information sur le traitement:<ul>{parameters}</ul><br/>"
 
         # French closing
@@ -590,6 +591,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         parameters = parameters + f"<li>Collections:<ul>{colls_string}</ul></li>"
         parameters = parameters + f"<li>GeomWKT: {geom_wkt}</li>"
         parameters = parameters + f"<li>GeomCRS: {geom_crs}</li>"
+        parameters = parameters + f"<li>OutCRS: {out_crs}</li>"
         html_content = html_content + f"Information on the extraction:<ul>{parameters}</ul><br/>"
 
         # English closing
@@ -603,7 +605,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
 
 
     @staticmethod
-    def _send_emails_body_admin(job_id: str, email: str, colls: list, geom_wkt: str, geom_crs: str, progress_marks: list, warnings: list, errors: list, big_error: Exception):
+    def _send_emails_body_admin(job_id: str, email: str, colls: list, geom_wkt: str, geom_crs: str, out_crs: int, progress_marks: list, warnings: list, errors: list, big_error: Exception):
 
         # Read the progress marks
         #[english_log, french_log] = ExtractNRCanProcessor._combine_progress_marks_for_response(progress_marks, prefix="<li>", suffix="</li>")
@@ -649,6 +651,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         parameters = parameters + f"<li>Collections:<ul>{colls_string}</ul></li>"
         parameters = parameters + f"<li>GeomWKT: {geom_wkt}</li>"
         parameters = parameters + f"<li>GeomCRS: {geom_crs}</li>"
+        parameters = parameters + f"<li>OutCRS: {out_crs}</li>"
         html_content = html_content + f"Information sur le traitement:<ul>{parameters}</ul><br/>"
 
         # If log
@@ -686,6 +689,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         parameters = parameters + f"<li>Collections:<ul>{colls_string}</ul></li>"
         parameters = parameters + f"<li>GeomWKT: {geom_wkt}</li>"
         parameters = parameters + f"<li>GeomCRS: {geom_crs}</li>"
+        parameters = parameters + f"<li>OutCRS: {out_crs}</li>"
         html_content = html_content + f"Information on the extraction:<ul>{parameters}</ul><br/>"
 
         # If log

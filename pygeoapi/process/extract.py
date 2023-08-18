@@ -358,7 +358,7 @@ class ExtractProcessor(BaseProcessor):
 
         if "out_crs" in data and data["out_crs"]:
             # If a number
-            if data["out_crs"].isdigit():
+            if isinstance(data["out_crs"], int) or data["out_crs"].isdigit():
                 # Store the crs
                 self.out_crs = int(data["out_crs"])
 

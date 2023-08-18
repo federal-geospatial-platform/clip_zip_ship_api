@@ -175,8 +175,17 @@ class PostgreSQLProvider(BaseProvider):
                     limit = 1000000000
             ##### NRCAN SPECIFIC END
 
+            out_crs = self.srid
+            crs_transform_out = self._get_crs_transform(crs_transform_spec)
+            if crs_transform_out:
+                out_crs = pyproj.CRS.from_wkt(crs_transform_spec.target_crs_wkt).to_epsg()
+
             if clip > 0 and geom_wkt:
-                results = (session.query(self.table_model, ST_Intersection(getattr(self.table_model, self.geom), ST_Transform(ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs)), self.srid)).label('inters'))
+                results = (session.query(self.table_model, ST_Transform(ST_Intersection(getattr(self.table_model, self.geom),
+                                                                                        ST_Transform(ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs)), self.srid)
+                                                                                        ),
+                                                           out_crs).label('inters')
+                                        )
                            .filter(property_filters)
                            .filter(cql_filters)
                            .filter(spat_filter)
@@ -197,11 +206,6 @@ class PostgreSQLProvider(BaseProvider):
                 returned = limit
             else:
                 returned = matched
-
-            out_crs = self.srid
-            crs_transform_out = self._get_crs_transform(crs_transform_spec)
-            if crs_transform_out:
-                out_crs = pyproj.CRS.from_wkt(crs_transform_spec.target_crs_wkt).to_epsg()
 
             LOGGER.debug(f'Found {matched} result(s)')
 
@@ -227,10 +231,8 @@ class PostgreSQLProvider(BaseProvider):
                     # Default to feature, with item[0]
                     obj = self._sqlalchemy_to_feature(item[0], crs_transform_out)
 
-                    # Do more with say item[1] (clipped geometry)
+                    # Do more with say item[1] (clipped geometry already in correct reference system)
                     shapely_geom = to_shape(item[1])
-                    if crs_transform_out is not None:
-                        shapely_geom = crs_transform_out(shapely_geom)
                     geojson_geom = shapely.geometry.mapping(shapely_geom)
 
                     if clip == 2:
