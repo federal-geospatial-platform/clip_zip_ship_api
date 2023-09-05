@@ -122,6 +122,9 @@ examples/django/sample_project/db.sqlite3
 # Pre-commit hooks config file
 .pre-commit-config.yaml
 
+# Pycharm project files
+.idea
+
 /extractions
 /jobs/pygeoapi-process-manager.db
 /jobs
