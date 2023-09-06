@@ -132,11 +132,6 @@ RUN \
     # Install pygeoapi
     && pip3 install -e . \
 
-    # Set default config and entrypoint for Docker Image
-    && cp /pygeoapi/docker/entrypoint.sh /entrypoint.sh  \
-    && cp /pygeoapi/local.config.${AWS_ENV}.yml /pygeoapi/local.config.yml \
-    && cp /pygeoapi/local.openapi.${AWS_ENV}.yml /pygeoapi/local.openapi.yml \
-
     # Cleanup TODO: remove unused Locales and TZs
     && apt-get remove --purge -y gcc ${DEB_BUILD_DEPS} \
     && apt-get clean \
@@ -155,9 +150,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN mkdir /gccp
 COPY ssl/get-ssl-cert.sh /gccp/get-ssl-cert.sh
 COPY ssl/run-get-ssl-cert.sh /gccp/run-get-ssl-cert.sh
-RUN chmod +x /gccp/run-get-ssl-cert.sh /gccp/get-ssl-cert.sh && \
-    /gccp/run-get-ssl-cert.sh && \
-    rm -rf /gccp
+RUN chmod +x /gccp/run-get-ssl-cert.sh /gccp/get-ssl-cert.sh
+RUN /gccp/run-get-ssl-cert.sh
+RUN rm -rf /gccp
 
 # Configure NGINX
 RUN unlink /etc/nginx/sites-enabled/default
@@ -165,12 +160,16 @@ COPY nginx/nginx.conf /etc/nginx/nginx.conf
 COPY nginx/server-api /etc/nginx/sites-available/server-api
 RUN ln -s /etc/nginx/sites-available/server-api /etc/nginx/sites-enabled/server-api
 
+# Set default config and entrypoint for Docker Image
+COPY docker/entrypoint.sh /entrypoint.sh
+COPY local.config.${AWS_ENV}.yml /pygeoapi/local.config.yml
+COPY local.openapi.${AWS_ENV}.yml /pygeoapi/local.openapi.yml
+
 # Set permissions and expose ports
 RUN chmod 1777 /pygeoapi && \
     chown -R www-data:www-data /pygeoapi
 EXPOSE 443/tcp
-EXPOSE 80
 
 RUN chmod +x /entrypoint.sh
 
-CMD [ "service", "nginx", "start", "&&", "/entrypoint.sh" ]
+CMD service nginx start && /entrypoint.sh
