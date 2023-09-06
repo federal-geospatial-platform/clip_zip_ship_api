@@ -27,7 +27,7 @@
 #
 # =================================================================
 
-import os, logging, json, zipfile, requests, uuid, emails, shutil
+import os, logging, json, zipfile, requests, uuid, emails, shutil, re
 import shapely, pyproj
 from mimetypes import guess_extension
 from xml.etree import cElementTree as ET
@@ -165,6 +165,13 @@ class ExtractNRCanProcessor(ExtractProcessor):
         if "email" in data and data['email']:
             # Store the email
             self.email = data['email']
+
+            # Validate the email is legit
+            if not re.fullmatch(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b', self.email):
+                # Error
+                err = EmailInvalidException()
+                self.errors.append(err)
+                LOGGER.warning(err)
 
         else:
             # Error
@@ -808,6 +815,10 @@ class ExtractNRCanProcessor(ExtractProcessor):
             return [str(e),  # English message works fine
                     f"Le paramètre d'entré 'email' n'est pas défini"]
 
+        elif isinstance(e, EmailInvalidException):
+            return [str(e),  # English message works fine
+                    f"Le paramètre d'entré 'email' n'est pas valide"]
+
         elif isinstance(e, CollectionsUndefinedException):
             return [str(e),  # English message works fine
                     f"Le paramètre d'entré 'collections' n'est pas défini"]
@@ -848,6 +859,12 @@ class EmailUndefinedException(ProviderPreconditionFailed):
     """Exception raised when no email is defined"""
     def __init__(self):
         super().__init__("Input parameter 'email' is undefined")
+
+
+class EmailInvalidException(ProviderPreconditionFailed):
+    """Exception raised when email is invalid"""
+    def __init__(self):
+        super().__init__("Input parameter 'email' is invalid")
 
 
 class ClippingAreaTooLargeException(ProviderRequestEntityTooLargeError):
