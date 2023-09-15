@@ -199,6 +199,10 @@ def pre_process(func):
 
     def inner(*args):
         cls, req_in = args[:2]
+
+        # Validate the resources are up to date
+        cls.reload_resources_if_necessary()
+
         req_out = APIRequest.with_data(req_in, getattr(cls, 'locales', set()))
         if len(args) > 2:
             return func(cls, req_out, *args[2:])
@@ -758,6 +762,7 @@ class API:
         :returns: `pygeoapi.API` instance
         """
 
+        self.last_loaded_resources = None
         self.config = config
         self.api_headers = get_api_rules(self.config).response_headers
         self.base_url = get_base_url(self.config)
@@ -808,9 +813,13 @@ class API:
         # Call on_load_resources sending the current resources configuration.
         self.config['resources'] = self.on_load_resources(
             self.config['resources'])
-        # Copy over for the template config (this is something that got added after a rebase of pending PR.. to be investigated..)
+        # Copy over for the template config (this is something that got added
+        # after a rebase of pending PR.. to be investigated..)
         self.tpl_config['resources'] = deepcopy(self.config['resources'])
-        self.tpl_config['server']['url'] = self.base_url # Same as in the __init__. This new tpl_config needs refactoring!
+        self.tpl_config['server']['url'] = self.base_url  # Same as in the __init__. This new tpl_config needs refactoring! noqa
+
+        # Keep track of UTC date of last load
+        self.last_loaded_resources = datetime.now(timezone.utc)
 
     def on_load_resources(self, resources):
         """
@@ -828,7 +837,27 @@ class API:
         # By default, return the same resources object, unchanged.
         return resources
 
-    def on_description_filter_spatially(self, collections, geom_wkt, geom_crs):
+    def on_load_resources_check(self, last_loaded_resources):
+        """
+        Overridable function to check if the resources should be reloaded.
+        As this implementation depends on your messaging broker, by default,
+        pygeoapi doesn't support that and returns False.
+        """
+        return False
+
+    def reload_resources_if_necessary(self):
+        """
+        This function reloads the resources if necessary, by calling
+        'on_load_resources_check' and then calling 'load_resources' if
+        necessary.
+        """
+
+        # If the resources should be reloaded
+        if self.on_load_resources_check(self.last_loaded_resources):
+            # Reload the resources
+            self.load_resources()
+
+    def on_description_filter_spatially(self, collections, geom_wkt, geom_crs):  #noqa
         """
         Overridable function to spatially filter the collections list based on
         a geometry.

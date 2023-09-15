@@ -13,8 +13,7 @@ from pygeoapi.util import (to_json, yaml_load)
 from pygeoapi import api_collections
 from pygeoapi import api_aws
 from copy import deepcopy
-
-
+from datetime import datetime, timezone
 
 
 class API_CZS(API):
@@ -62,6 +61,7 @@ class API_CZS(API):
             # Fetch the collections from the database
             data = api_collections.fetch_collections(conn)
 
+            # For each collection found in the database
             for d in data:
                 providerDict = None
 
@@ -118,6 +118,30 @@ class API_CZS(API):
 
         # Return the resources
         return the_resources
+
+
+    def on_load_resources_check(self, last_loaded_resources):
+        """
+        Overrides the check if the resources should be reloaded for the currently running instance of pygeoapi.
+        This is useful as pygeoapi can be distributed (load balanced) on multiple instances with their own allocated memory for their resources.
+
+        :param last_loaded_resources: the UTC date of the last time the resources were loaded on this particular pygeoapi instance.
+
+        :returns: True if the resources should be reloaded (no need to reload the resources manually here, the API mother class will do it)
+        """
+
+        # Open the connection
+        with open_conn(self.config["settings"]["database"]) as conn:
+            # Check if the date of last load is prior to the date in the database
+            date_loaded = api_collections.get_flag_reload_resources(conn)
+
+            # If the date last loaded on the pygeoapi instance is prior to date in the database
+            if last_loaded_resources < date_loaded:
+                # Must reload
+                return True
+
+        # No need to reload
+        return False
 
 
     def on_description_filter_spatially(self, collections, geom_wkt, geom_crs):
@@ -231,10 +255,16 @@ class API_CZS(API):
 
         headers = request.get_response_headers()
 
-        # Reinitialize the configuration
-        self.load_resources()
+        # Open the connection
+        with open_conn(self.config["settings"]["database"]) as conn:
+            # Indicate that the resources should be reloaded by flagging it in the database.
+            # That way, any/all pygeoapi spawn instances which use the collections in their memory will reload
+            # prior to responding on their next call
+            the_date = datetime.now(timezone.utc)
+            api_collections.update_flag_reload_resources(conn, the_date)
+            conn.commit()
 
-        return headers, HTTPStatus.OK, to_json({"reloaded": True}, self.pretty_print)
+        return headers, HTTPStatus.OK, to_json({"reloaded": True, "date": the_date}, self.pretty_print)
 
 
 def open_conn(database):
