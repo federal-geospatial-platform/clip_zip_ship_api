@@ -28,7 +28,7 @@
 #
 # =================================================================
 
-# pygeoapi entry script
+# pygeoapi entry script edited for last line unix thing
 
 echo "START /entrypoint.sh"
 
