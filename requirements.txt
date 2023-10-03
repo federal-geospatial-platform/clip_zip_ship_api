@@ -7,7 +7,7 @@ Flask
 #jinja
 jinja2==3.0.3
 jsonschema
-pydantic<2.0
+pydantic
 pygeofilter
 pygeoif
 pyproj
@@ -24,4 +24,5 @@ geoalchemy2
 boto3
 emails
 tinydb
-#unicodecsv
+typing-extensions
+unicodecsv
