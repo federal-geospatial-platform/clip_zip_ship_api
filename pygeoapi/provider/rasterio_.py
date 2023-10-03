@@ -398,7 +398,7 @@ class RasterioProvider(BaseProvider):
 
     def reproject_data_to_memory_file(self, dataset_src, memoryfile_dest: MemoryFile, out_crs: int):
         # Create the CRS
-        crs = rasterio.CRS({'init': f'EPSG:{out_crs}'})
+        crs = CRS.from_epsg(out_crs)
         transform, width, height = calculate_default_transform(dataset_src.crs, crs, dataset_src.width, dataset_src.height, *dataset_src.bounds)
         kwargs = dataset_src.meta.copy()
 
