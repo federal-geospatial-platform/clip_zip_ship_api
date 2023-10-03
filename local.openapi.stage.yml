@@ -22,7 +22,7 @@ info:
     url: https://creativecommons.org/licenses/by/4.0/
   termsOfService: https://creativecommons.org/licenses/by/4.0/
   title: PyGeoAPI for NRCan collections
-  version: 0.2.1
+  version: 0.2.2
   x-keywords:
   - geospatial
   - data
