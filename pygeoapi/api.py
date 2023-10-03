@@ -200,14 +200,31 @@ def pre_process(func):
     def inner(*args):
         cls, req_in = args[:2]
 
-        # Validate the resources are up to date
-        cls.reload_resources_if_necessary()
-
         req_out = APIRequest.with_data(req_in, getattr(cls, 'locales', set()))
         if len(args) > 2:
             return func(cls, req_out, *args[2:])
         else:
             return func(cls, req_out)
+
+    return inner
+
+
+def pre_load_colls(func):
+    """
+    Decorator that makes sure the loaded collections in memory are update to date.
+
+    :param func: decorated function
+
+    :returns: `func`
+    """
+
+    def inner(*args, **kwargs):
+        cls = args[0]
+
+        # Validate the resources are up to date
+        cls.reload_resources_if_necessary()
+
+        return func(*args, **kwargs)
 
     return inner
 
@@ -1128,6 +1145,7 @@ class API:
     @gzip
     @pre_process
     @jsonldify
+    @pre_load_colls
     def get_describe_collections(self, request: Union[APIRequest, Any],
                                  dataset=None) -> Tuple[dict, int, str]:
         """
@@ -1588,6 +1606,7 @@ class API:
     @gzip
     @pre_process
     @jsonldify
+    @pre_load_colls
     def get_collection_queryables(self, request: Union[APIRequest, Any],
                                   dataset=None) -> Tuple[dict, int, str]:
         """
@@ -1678,6 +1697,7 @@ class API:
 
     @gzip
     @pre_process
+    @pre_load_colls
     def get_collection_items(
             self, request: Union[APIRequest, Any],
             dataset) -> Tuple[dict, int, str]:
@@ -2140,6 +2160,7 @@ class API:
 
     @gzip
     @pre_process
+    @pre_load_colls
     def post_collection_items(
             self, request: Union[APIRequest, Any],
             dataset) -> Tuple[dict, int, str]:
@@ -2445,6 +2466,7 @@ class API:
 
     @gzip
     @pre_process
+    @pre_load_colls
     def manage_collection_item(
             self, request: Union[APIRequest, Any],
             action, dataset, identifier=None) -> Tuple[dict, int, str]:
@@ -2555,6 +2577,7 @@ class API:
 
     @gzip
     @pre_process
+    @pre_load_colls
     def get_collection_item(self, request: Union[APIRequest, Any],
                             dataset, identifier) -> Tuple[dict, int, str]:
         """
@@ -2754,6 +2777,7 @@ class API:
 
     @pre_process
     @jsonldify
+    @pre_load_colls
     def get_collection_coverage(self, request: Union[APIRequest, Any],
                                 dataset) -> Tuple[dict, int, str]:
         """
@@ -2923,6 +2947,7 @@ class API:
     @gzip
     @pre_process
     @jsonldify
+    @pre_load_colls
     def get_collection_coverage_domainset(
             self, request: Union[APIRequest, Any],
             dataset) -> Tuple[dict, int, str]:
@@ -2981,6 +3006,7 @@ class API:
     @gzip
     @pre_process
     @jsonldify
+    @pre_load_colls
     def get_collection_coverage_rangetype(
             self, request: Union[APIRequest, Any],
             dataset) -> Tuple[dict, int, str]:
@@ -3038,6 +3064,7 @@ class API:
     @gzip
     @pre_process
     @jsonldify
+    @pre_load_colls
     def get_collection_tiles(self, request: Union[APIRequest, Any],
                              dataset=None) -> Tuple[dict, int, str]:
         """
@@ -3164,6 +3191,7 @@ class API:
         return headers, HTTPStatus.OK, to_json(tiles, self.pretty_print)
 
     @pre_process
+    @pre_load_colls
     def get_collection_tiles_data(
             self, request: Union[APIRequest, Any],
             dataset=None, matrix_id=None,
@@ -3252,6 +3280,7 @@ class API:
     @gzip
     @pre_process
     @jsonldify
+    @pre_load_colls
     def get_collection_tiles_metadata(
             self, request: Union[APIRequest, Any],
             dataset=None, matrix_id=None) -> Tuple[dict, int, str]:
@@ -3350,6 +3379,7 @@ class API:
 
     @gzip
     @pre_process
+    @pre_load_colls
     def get_collection_map(self, request: Union[APIRequest, Any],
                            dataset, style=None) -> Tuple[dict, int, str]:
         """
@@ -3511,6 +3541,7 @@ class API:
                 data, self.pretty_print)
 
     @gzip
+    @pre_load_colls
     def get_collection_map_legend(
             self, request: Union[APIRequest, Any],
             dataset, style=None) -> Tuple[dict, int, str]:
@@ -4105,6 +4136,7 @@ class API:
 
     @gzip
     @pre_process
+    @pre_load_colls
     def get_collection_edr_query(
             self, request: Union[APIRequest, Any],
             dataset, instance, query_type) -> Tuple[dict, int, str]:
@@ -4270,6 +4302,7 @@ class API:
     @gzip
     @pre_process
     @jsonldify
+    @pre_load_colls
     def get_stac_root(
             self, request: Union[APIRequest, Any]) -> Tuple[dict, int, str]:
         """
@@ -4327,6 +4360,7 @@ class API:
     @gzip
     @pre_process
     @jsonldify
+    @pre_load_colls
     def get_stac_path(self, request: Union[APIRequest, Any],
                       path) -> Tuple[dict, int, str]:
         """
