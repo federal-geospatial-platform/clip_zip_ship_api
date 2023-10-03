@@ -136,11 +136,18 @@ class API_CZS(API):
             date_loaded = api_collections.get_flag_reload_resources(conn)
 
             # If the date last loaded on the pygeoapi instance is prior to date in the database
+            print(f'{os.getpid()} - Date in DB')
+            print(date_loaded)
+            print(f'{os.getpid()} - Date last load')
+            print(last_loaded_resources)
+
             if last_loaded_resources < date_loaded:
+                print(f'{os.getpid()} - Must reload collections')
                 # Must reload
                 return True
 
         # No need to reload
+        print(f'{os.getpid()} - No need to reload collections')
         return False
 
 
