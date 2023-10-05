@@ -60,7 +60,7 @@ function error() {
 # Workdir
 cd ${PYGEOAPI_HOME}
 
-echo "Trying to generate openapi.yml"
+#echo "Trying to generate openapi.yml"
 #pygeoapi openapi generate ${PYGEOAPI_CONFIG} --output-file ${PYGEOAPI_OPENAPI}
 
 [[ $? -ne 0 ]] && error "openapi.yml could not be generated ERROR"
