@@ -166,7 +166,7 @@ COPY local.config.${AWS_ENV}.yml /pygeoapi/local.config.yml
 COPY local.openapi.${AWS_ENV}.yml /pygeoapi/local.openapi.yml
 
 # Set permissions and expose ports
-RUN chmod 1777 /pygeoapi && \
+RUN chmod -R 1777 /pygeoapi && \
     chown -R www-data:www-data /pygeoapi
 EXPOSE 443/tcp
 
