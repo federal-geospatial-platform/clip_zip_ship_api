@@ -1,0 +1,28 @@
+name: Update Release Version in openapi.yaml files
+on:
+  workflow_dispatch:
+  create:
+    tags:
+      - 'v*'
+
+env:
+  TAG_NAME: ${{ github.ref_name }}
+
+jobs:
+  update_release_version:
+    runs-on: ubuntu-latest
+    steps:      
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Update Release Version
+      run: |
+        cd Python/api
+        # Replace the version in all openapi yaml files
+        find . -type f -name "openapi.*" -exec sed -i "/version:/s/:.*/: $TAG_NAME/" {} +
+
+    - name: Commit and Push changes
+      run: |
+        git config user.name "GitHub Actions"
+        git commit -a -m "Updated release version to "${TAG_NAME}" in openapi.yaml files"
+        git push origin HEAD:$TAG_NAME --force
