@@ -369,6 +369,10 @@ components:
               type: number
               format: integer
               example: 3978
+            out_crs:
+              type: number
+              format: integer
+
 paths:
   /:
     get:
