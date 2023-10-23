@@ -4,11 +4,12 @@ servers:
     geospatial data
   url: "{environment}"
   variables:
-  environment:
-    default: https://api.czs-dev.services.geo.ca
-    enum:
-      - https://api.czs-dev.services.geo.ca
-      - https://internal.api.czs-dev.services.geo.ca
+    environment:
+      default: https://api.czs-dev.services.geo.ca
+      enum:
+        - https://api.czs-dev.services.geo.ca
+        - https://internal.api.czs-dev.services.geo.ca
+          
 tags:
 - description: NRCan's implementation of the PyGeoAPI to provide an API to NRCan's
     geospatial data
