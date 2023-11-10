@@ -17,12 +17,11 @@ jobs:
       
     - name: Update Release Version
       run: |
-        cd Python/api
-        # Replace the version in all openapi yaml files
-        find . -type f -name "openapi.*" -exec sed -i "/version:/s/:.*/: $TAG_NAME/" {} +
+        # Replace the version in all local openapi yaml files
+        find . -type f -name "local.openapi.*" -exec sed -i "/version:/s/:.*/: $TAG_NAME/" {} +
 
     - name: Commit and Push changes
       run: |
         git config user.name "GitHub Actions"
-        git commit -a -m "Updated release version to "${TAG_NAME}" in openapi.yaml files"
+        git commit -a -m "Updated release version to "${TAG_NAME}" in local.openapi.yaml files"
         git push origin HEAD:$TAG_NAME --force
