@@ -770,17 +770,19 @@ class APIRequest:
 class API:
     """API object"""
 
-    def __init__(self, config):
+    def __init__(self, config, openapi):
         """
         constructor
 
         :param config: configuration dict
+        :param openapi: openapi dict
 
         :returns: `pygeoapi.API` instance
         """
 
         self.last_loaded_resources = None
         self.config = config
+        self.openapi = openapi
         self.api_headers = get_api_rules(self.config).response_headers
         self.base_url = get_base_url(self.config)
         self.prefetcher = UrlPrefetcher()
@@ -1069,8 +1071,8 @@ class API:
 
     @gzip
     @pre_process
-    def openapi(self, request: Union[APIRequest, Any],
-                openapi) -> Tuple[dict, int, str]:
+    def openapi_(self, request: Union[APIRequest, Any]) -> Tuple[
+                 dict, int, str]:
         """
         Provide OpenAPI document
 
@@ -1100,10 +1102,11 @@ class API:
 
         headers['Content-Type'] = 'application/vnd.oai.openapi+json;version=3.0'  # noqa
 
-        if isinstance(openapi, dict):
-            return headers, HTTPStatus.OK, to_json(openapi, self.pretty_print)
+        if isinstance(self.openapi, dict):
+            return headers, HTTPStatus.OK, to_json(self.openapi,
+                                                   self.pretty_print)
         else:
-            return headers, HTTPStatus.OK, openapi
+            return headers, HTTPStatus.OK, self.openapi
 
     @gzip
     @pre_process
