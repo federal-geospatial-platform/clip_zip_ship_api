@@ -22,12 +22,12 @@ class API_CZS(API):
      the core PyGeoAPI-API object to add NRCan-specificfunctionalities.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, openapi):
         """
         Initialize object
         """
         self.secret_aws_keys = {}
-        super().__init__(config)
+        super().__init__(config, openapi)
 
 
     def on_load_resources(self, resources):
