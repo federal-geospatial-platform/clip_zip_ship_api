@@ -572,6 +572,8 @@ def get_oas_30(cfg):
                         {'$ref': f"{OPENAPI_YAML['oapif-1']}#/components/parameters/limit"},  # noqa
                         {'$ref': '#/components/parameters/crs'},  # noqa
                         {'$ref': '#/components/parameters/bbox-crs'},  # noqa
+                        {'$ref': '#/components/parameters/geom'},
+                        {'$ref': '#/components/parameters/geom-crs'},
                         coll_properties,
                         {'$ref': '#/components/parameters/vendorSpecificParameters'},  # noqa
                         {'$ref': '#/components/parameters/skipGeometry'},
@@ -809,6 +811,8 @@ def get_oas_30(cfg):
                         items_l,
                         {'$ref': '#/components/parameters/bbox'},
                         {'$ref': '#/components/parameters/bbox-crs'},  # noqa
+                        {'$ref': '#/components/parameters/geom'},
+                        {'$ref': '#/components/parameters/geom-crs'}
                     ],
                     'responses': {
                         '200': {'$ref': f"{OPENAPI_YAML['oapif-1']}#/components/responses/Features"},  # noqa

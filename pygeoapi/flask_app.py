@@ -36,7 +36,7 @@ import click
 
 from flask import Flask, Blueprint, make_response, request, send_from_directory
 
-from pygeoapi.api import API
+from pygeoapi.api_czs import API_CZS
 from pygeoapi.openapi import load_openapi_document
 from pygeoapi.util import get_mimetype, yaml_load, get_api_rules
 
@@ -79,7 +79,7 @@ if CONFIG['server'].get('cors', False):
 APP.config['JSONIFY_PRETTYPRINT_REGULAR'] = CONFIG['server'].get(
     'pretty_print', True)
 
-api_ = API(CONFIG, OPENAPI)
+api_ = API_CZS(CONFIG, OPENAPI)
 
 OGC_SCHEMAS_LOCATION = CONFIG['server'].get('ogc_schemas_location')
 
@@ -148,6 +148,16 @@ def openapi():
     return get_response(api_.openapi_(request))
 
 
+@BLUEPRINT.route('/reload_resources')
+def reload_resources():
+    """
+    Endpoint to manually trigger a reload of the configuration
+
+    :returns: HTTP response
+    """
+    return get_response(api_.reload_resources(request))
+
+
 @BLUEPRINT.route('/conformance')
 def conformance():
     """
@@ -158,7 +168,7 @@ def conformance():
     return get_response(api_.conformance(request))
 
 
-@BLUEPRINT.route('/collections')
+@BLUEPRINT.route('/collections', methods=['GET', 'POST'])
 @BLUEPRINT.route('/collections/<path:collection_id>')
 def collections(collection_id=None):
     """
@@ -168,7 +178,13 @@ def collections(collection_id=None):
 
     :returns: HTTP response
     """
-    return get_response(api_.describe_collections(request, collection_id))
+    if request.method == 'POST':  # list collections using POST
+        return get_response(api_.post_describe_collections(request,
+                                                           collection_id))
+
+    else:  # list collections using GET
+        return get_response(api_.get_describe_collections(request,
+                                                          collection_id))
 
 
 @BLUEPRINT.route('/collections/<path:collection_id>/queryables')

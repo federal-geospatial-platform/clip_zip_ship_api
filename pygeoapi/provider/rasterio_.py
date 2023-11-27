@@ -32,11 +32,14 @@ import logging
 from pyproj import CRS, Transformer
 import rasterio
 from rasterio.io import MemoryFile
+from rasterio.warp import (reproject, calculate_default_transform)
+from rasterio.enums import Resampling
 import rasterio.mask
 
 from pygeoapi.provider.base import (BaseProvider, ProviderConnectionError,
                                     ProviderQueryError)
 from pygeoapi.util import read_data
+import shapely
 
 LOGGER = logging.getLogger(__name__)
 
@@ -162,12 +165,17 @@ class RasterioProvider(BaseProvider):
         return rangetype
 
     def query(self, properties=[], subsets={}, bbox=None, bbox_crs=4326,
+              geom=None, geom_crs: int=4326, out_crs: int=None,
               datetime_=None, format_='json', **kwargs):
         """
-        Extract data from collection collection
+        Extract data from collection
         :param properties: list of bands
         :param subsets: dict of subset names with lists of ranges
         :param bbox: bounding box [minx,miny,maxx,maxy]
+        :param bbox_crs: bounding box crs
+        :param geom: geometry as wkt
+        :param geom_crs: geometry crs
+        :param out_crs: output crs when expecting a reprojection
         :param datetime_: temporal (datestamp or extent)
         :param format_: data format of output
 
@@ -185,7 +193,7 @@ class RasterioProvider(BaseProvider):
         if not bbox:
             bbox = []
 
-        if all([not bands, not subsets, not bbox, format_ != 'json']):
+        if all([not bands, not subsets, not bbox, not geom, format_ != 'json']):
             LOGGER.debug('No parameters specified, returning native data')
             return read_data(self.data)
 
@@ -196,7 +204,49 @@ class RasterioProvider(BaseProvider):
             LOGGER.warning(msg)
             raise ProviderQueryError(msg)
 
-        if len(bbox) > 0:
+        if geom:
+            # Load the wkt as a shapes (GeoJSON)
+            shapes = shapely.wkt.loads(geom)
+
+            crs_src = CRS.from_epsg(geom_crs)
+
+            if self.options and 'crs' in self.options:
+                crs_dest = CRS.from_string(self.options['crs'])
+            else:
+                crs_dest = CRS.from_epsg(self._data.crs.to_epsg())
+
+            if crs_src == crs_dest:
+                LOGGER.debug('source geom CRS and data CRS are the same')
+
+                # Make it as GeoJSON
+                shapes = shapely.geometry.mapping(shapes)
+
+            else:
+                LOGGER.debug('source geom CRS and data CRS are different')
+                LOGGER.debug('reprojecting geom into native coordinates')
+
+                # shapely<2.0, sample code not working in shapely<2.0 :(
+                # Transform
+                #import pyproj
+                #from functools import partial # (import this to try it..)
+                #project = partial(pyproj.transform, crs_src.to_string(), crs_dest.to_string())
+                #shapes = shapely.ops.transform(project, shapes)
+
+                # shapely>2.0
+                # Transform
+                project = Transformer.from_crs(crs_src, crs_dest, always_xy=True)
+                shapes = shapely.ops.transform(project.transform, shapes)
+
+                # Store the bbox representation for rasterio's ouput
+                bbox = shapes.bounds
+
+                # Make it as GeoJSON
+                shapes = shapely.geometry.mapping(shapes)
+
+            # Make it an array
+            shapes = [shapes]
+
+        elif len(bbox) > 0:
             minx, miny, maxx, maxy = bbox
 
             crs_src = CRS.from_epsg(bbox_crs)
@@ -204,7 +254,7 @@ class RasterioProvider(BaseProvider):
             if self.options and 'crs' in self.options:
                 crs_dest = CRS.from_string(self.options['crs'])
             else:
-                crs_dest = self._data.crs
+                crs_dest = CRS.from_epsg(self._data.crs.to_epsg())
 
             if crs_src == crs_dest:
                 LOGGER.debug('source bbox CRS and data CRS are the same')
@@ -273,13 +323,16 @@ class RasterioProvider(BaseProvider):
 
             if shapes:  # spatial subset
                 try:
-                    LOGGER.debug('Clipping data with bbox')
+                    LOGGER.debug('Clipping data spatially')
+
+                    # Query
                     out_image, out_transform = rasterio.mask.mask(
                         _data,
                         filled=False,
                         shapes=shapes,
                         crop=True,
                         indexes=args['indexes'])
+
                 except ValueError as err:
                     LOGGER.error(err)
                     raise ProviderQueryError(err)
@@ -309,19 +362,62 @@ class RasterioProvider(BaseProvider):
 
             out_meta['units'] = _data.units
 
+            # If returning json
+            if format_ == 'json':
+                LOGGER.debug('Creating output in CoverageJSON')
+                out_meta['bands'] = args['indexes']
+                return self.gen_covjson(out_meta, out_image)
+
+            # Serialize in memory to return data in native format
             LOGGER.debug('Serializing data in memory')
-            with MemoryFile() as memfile:
-                with memfile.open(**out_meta) as dest:
-                    dest.write(out_image)
 
-                if format_ == 'json':
-                    LOGGER.debug('Creating output in CoverageJSON')
-                    out_meta['bands'] = args['indexes']
-                    return self.gen_covjson(out_meta, out_image)
+            # If we have to reproject the image to another destination CRS
+            if out_crs:
+                # Use another MemoryFile to do a reprojection
+                LOGGER.debug('Returning data in native format and reprojected')
+                with MemoryFile() as memfile:
+                    with memfile.open(**out_meta) as dest:
+                        # Write the result
+                        dest.write(out_image)
 
-                else:  # return data in native format
-                    LOGGER.debug('Returning data in native format')
+                        # Create destination memory file
+                        with MemoryFile() as memfile_proj:
+                            # Reproject
+                            self.reproject_data_to_memory_file(dest, memfile_proj, out_crs)
+
+                            # Return the reprojected image
+                            return memfile_proj.read()
+
+            else:
+                # Use a single memory file and return as is
+                LOGGER.debug('Returning data in native format and native projection')
+                with MemoryFile() as memfile:
+                    with memfile.open(**out_meta) as dest:
+                        dest.write(out_image)
                     return memfile.read()
+
+    def reproject_data_to_memory_file(self, dataset_src, memoryfile_dest: MemoryFile, out_crs: int):
+        # Create the CRS
+        crs = CRS.from_epsg(out_crs)
+        transform, width, height = calculate_default_transform(dataset_src.crs, crs, dataset_src.width, dataset_src.height, *dataset_src.bounds)
+        kwargs = dataset_src.meta.copy()
+
+        kwargs.update({
+            'crs': crs,
+            'transform': transform,
+            'width': width,
+            'height': height})
+
+        with memoryfile_dest.open(**kwargs) as dest_proj:
+            for i in range(1, dataset_src.count + 1):
+                reproject(
+                    source=rasterio.band(dataset_src, i),
+                    destination=rasterio.band(dest_proj, i),
+                    src_transform=dataset_src.transform,
+                    src_crs=dataset_src.crs,
+                    dst_transform=transform,
+                    dst_crs=crs,
+                    resampling=Resampling.nearest)
 
     def gen_covjson(self, metadata, data):
         """

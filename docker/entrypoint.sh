@@ -43,6 +43,7 @@ SCRIPT_NAME=${SCRIPT_NAME:=/}
 CONTAINER_NAME=${CONTAINER_NAME:=pygeoapi}
 CONTAINER_HOST=${CONTAINER_HOST:=0.0.0.0}
 CONTAINER_PORT=${CONTAINER_PORT:=80}
+USER=${USER:=www-data}
 WSGI_WORKERS=${WSGI_WORKERS:=4}
 WSGI_WORKER_TIMEOUT=${WSGI_WORKER_TIMEOUT:=6000}
 WSGI_WORKER_CLASS=${WSGI_WORKER_CLASS:=gevent}
@@ -59,8 +60,8 @@ function error() {
 # Workdir
 cd ${PYGEOAPI_HOME}
 
-echo "Trying to generate openapi.yml"
-pygeoapi openapi generate ${PYGEOAPI_CONFIG} --output-file ${PYGEOAPI_OPENAPI}
+#echo "Trying to generate openapi.yml"
+#pygeoapi openapi generate ${PYGEOAPI_CONFIG} --output-file ${PYGEOAPI_OPENAPI}
 
 [[ $? -ne 0 ]] && error "openapi.yml could not be generated ERROR"
 
@@ -100,6 +101,7 @@ case ${entry_cmd} in
 				--timeout ${WSGI_WORKER_TIMEOUT} \
 				--name=${CONTAINER_NAME} \
 				--bind ${CONTAINER_HOST}:${CONTAINER_PORT} \
+					--user ${USER} \
 				pygeoapi.flask_app:APP
 	  ;;
 	*)

@@ -52,7 +52,7 @@ import logging
 
 from copy import deepcopy
 from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
-from geoalchemy2.functions import ST_MakeEnvelope
+from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_PolygonFromText, ST_Intersection, ST_MakeValid
 from geoalchemy2.shape import to_shape
 from pygeofilter.backends.sqlalchemy.evaluate import to_filter
 import pyproj
@@ -66,7 +66,7 @@ from sqlalchemy.sql.expression import and_
 
 from pygeoapi.provider.base import BaseProvider, \
     ProviderConnectionError, ProviderQueryError, ProviderItemNotFoundError
-from pygeoapi.util import get_transform_from_crs
+from pygeoapi.util import get_transform_from_crs, get_area_from_wkt_in_km2
 
 
 _ENGINE_STORE = {}
@@ -96,6 +96,7 @@ class PostgreSQLProvider(BaseProvider):
         self.table = provider_def['table']
         self.id_field = provider_def['id_field']
         self.geom = provider_def.get('geom_field', 'geom')
+        self.max_extract_area_km_2 = provider_def['max_extract_area'] if 'max_extract_area' in provider_def else 1000
 
         LOGGER.debug(f'Name: {self.name}')
         LOGGER.debug(f'Table: {self.table}')
@@ -109,12 +110,21 @@ class PostgreSQLProvider(BaseProvider):
         self._store_db_parameters(provider_def['data'], options)
         self._engine, self.table_model = self._get_engine_and_table_model()
         LOGGER.debug(f'DB connection: {repr(self._engine.url)}')
+
+        # Read the table fields
         self.fields = self.get_fields()
+        LOGGER.debug('Fields: {}'.format(self.fields))
+
+        # Read the table SRID
+        self.srid = self.get_srid()
+        LOGGER.debug('SRID: {}'.format(self.srid))
 
     def query(self, offset=0, limit=10, resulttype='results',
-              bbox=[], datetime_=None, properties=[], sortby=[],
+              bbox=None, bbox_crs=None, geom_wkt=None,
+              geom_crs=None, data_crs=None,
+              datetime_=None, properties=[], sortby=[],
               select_properties=[], skip_geometry=False, q=None,
-              filterq=None, crs_transform_spec=None, **kwargs):
+              filterq=None, crs_transform_spec=None, clip=0, **kwargs):
         """
         Query Postgis for all the content.
         e,g: http://localhost:5000/collections/hotosm_bdi_waterways/items?
@@ -123,7 +133,17 @@ class PostgreSQLProvider(BaseProvider):
         :param offset: starting record to return (default 0)
         :param limit: number of records to return (default 10)
         :param resulttype: return results or hit limit (default results)
-        :param bbox: bounding box [minx,miny,maxx,maxy]
+        :param bbox: bounding box [minx,miny,maxx,maxy] to query on
+        (when specified)
+        :param bbox_crs: the spatial projection of the bounding box
+        (when specified)
+        :param geom_wkt: the geom wkt to query on
+        (when specified)
+        :param geom_crs: the spatial projection of the geom wkt
+        (when specified)
+        :param data_crs: the spatial projection of the data being queried, as
+        read from the provider configuration
+        (when specified).
         :param datetime_: temporal (datestamp or extent)
         :param properties: list of tuples (name, value)
         :param sortby: list of dicts (property, order)
@@ -139,21 +159,50 @@ class PostgreSQLProvider(BaseProvider):
         LOGGER.debug('Preparing filters')
         property_filters = self._get_property_filters(properties)
         cql_filters = self._get_cql_filters(filterq)
-        bbox_filter = self._get_bbox_filter(bbox)
+        spat_filter = self._get_spatial_filter(bbox, bbox_crs, geom_wkt, geom_crs)
         order_by_clauses = self._get_order_by_clauses(sortby, self.table_model)
         selected_properties = self._select_properties_clause(select_properties,
                                                              skip_geometry)
 
         LOGGER.debug('Querying PostGIS')
+
         # Execute query within self-closing database Session context
         with Session(self._engine) as session:
-            results = (session.query(self.table_model)
-                       .filter(property_filters)
-                       .filter(cql_filters)
-                       .filter(bbox_filter)
-                       .order_by(*order_by_clauses)
-                       .options(selected_properties)
-                       .offset(offset))
+            ##### NRCAN SPECIFIC START
+            # If there's a geometry for the request
+            if geom_wkt:
+                # If the area is valid
+                if get_area_from_wkt_in_km2(geom_wkt, geom_crs) <= self.max_extract_area_km_2:
+                    # Limit can be infinite
+                    print("Override the limit!")
+                    limit = 1000000000
+            ##### NRCAN SPECIFIC END
+
+            out_crs = self.srid
+            crs_transform_out = self._get_crs_transform(crs_transform_spec)
+            if crs_transform_out:
+                out_crs = pyproj.CRS.from_wkt(crs_transform_spec.target_crs_wkt).to_epsg()
+
+            if clip > 0 and geom_wkt:
+                results = (session.query(self.table_model, ST_Transform(ST_Intersection(getattr(self.table_model, self.geom),
+                                                                                        ST_Transform(ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs)), self.srid)
+                                                                                        ),
+                                                           out_crs).label('inters')
+                                        )
+                           .filter(property_filters)
+                           .filter(cql_filters)
+                           .filter(spat_filter)
+                           .order_by(*order_by_clauses)
+                           .options(selected_properties)
+                           .offset(offset))
+            else:
+                results = (session.query(self.table_model)
+                           .filter(property_filters)
+                           .filter(cql_filters)
+                           .filter(spat_filter)
+                           .order_by(*order_by_clauses)
+                           .options(selected_properties)
+                           .offset(offset))
 
             matched = results.count()
             if limit < matched:
@@ -168,17 +217,41 @@ class PostgreSQLProvider(BaseProvider):
                 'type': 'FeatureCollection',
                 'features': [],
                 'numberMatched': matched,
-                'numberReturned': returned
+                'numberReturned': returned,
+                'crs': {
+                    'type': 'name',
+                    'properties': {
+                        'name': f'urn:ogc:def:crs:EPSG::{out_crs}'
+                    }
+                }
             }
 
             if resulttype == "hits" or not results:
                 response['numberReturned'] = 0
                 return response
-            crs_transform_out = self._get_crs_transform(crs_transform_spec)
             for item in results.limit(limit):
-                response['features'].append(
-                    self._sqlalchemy_to_feature(item, crs_transform_out)
-                )
+                if clip > 0 and geom_wkt:
+                    # Default to feature, with item[0]
+                    obj = self._sqlalchemy_to_feature(item[0], crs_transform_out)
+
+                    # Do more with say item[1] (clipped geometry already in correct reference system)
+                    shapely_geom = to_shape(item[1])
+                    geojson_geom = shapely.geometry.mapping(shapely_geom)
+
+                    if clip == 2:
+                        # Store as enhanced attribute in the geojson
+                        obj['geometry_clipped'] = geojson_geom
+
+                    else:
+                        # Override
+                        obj['geometry'] = geojson_geom
+                    response['features'].append(obj)
+
+                else:
+                    # Default
+                    response['features'].append(
+                        self._sqlalchemy_to_feature(item, crs_transform_out)
+                    )
 
         return response
 
@@ -221,6 +294,21 @@ class PostgreSQLProvider(BaseProvider):
             for column in self.table_model.__table__.columns
             if column.name != self.geom  # Exclude geometry column
         }
+
+    def get_srid(self):
+        """
+        Return the srid of the underlying table
+
+        :returns: integer of the SRID
+        """
+        LOGGER.debug('Get SRID')
+
+        # Execute query within self-closing database Session context
+        srid = None
+        with Session(self._engine) as session:
+            srid = session.scalar(
+                       Find_SRID(self.schema, self.table, self.geom))
+        return srid
 
     def get(self, identifier, crs_transform_spec=None, **kwargs):
         """
@@ -276,6 +364,7 @@ class PostgreSQLProvider(BaseProvider):
         self.db_port = parameters.get('port', 5432)
         self.db_name = parameters.get('dbname')
         self.db_search_path = parameters.get('search_path', ['public'])
+        self.schema = self.db_search_path[0]
         self._db_password = parameters.get('password')
         self.db_options = options
 
@@ -333,14 +422,13 @@ class PostgreSQLProvider(BaseProvider):
 
         # Look for table in the first schema in the search path
         try:
-            schema = self.db_search_path[0]
-            metadata.reflect(schema=schema, only=[self.table], views=True)
+            metadata.reflect(schema=self.schema, only=[self.table], views=True)
         except OperationalError:
             msg = (f"Could not connect to {repr(engine.url)} "
                    "(password hidden).")
             raise ProviderConnectionError(msg)
         except InvalidRequestError:
-            msg = (f"Table '{self.table}' not found in schema '{schema}' "
+            msg = (f"Table '{self.table}' not found in schema '{self.schema}' "
                    f"on {repr(engine.url)}.")
             raise ProviderQueryError(msg)
 
@@ -348,14 +436,15 @@ class PostgreSQLProvider(BaseProvider):
         # It is necessary to add the primary key constraint because SQLAlchemy
         # requires it to reflect the table, but a view in a PostgreSQL database
         # does not have a primary key defined.
-        sqlalchemy_table_def = metadata.tables[f'{schema}.{self.table}']
+        sqlalchemy_table_def = metadata.tables[f'{self.schema}.{self.table}']
+
         try:
             sqlalchemy_table_def.append_constraint(
                 PrimaryKeyConstraint(self.id_field)
             )
         except KeyError:
             msg = (f"No such id_field column ({self.id_field}) on "
-                   f"{schema}.{self.table}.")
+                   f"{self.schema}.{self.table}.")
             raise ProviderQueryError(msg)
 
         Base = automap_base(metadata=metadata)
@@ -448,16 +537,44 @@ class PostgreSQLProvider(BaseProvider):
 
         return property_filters
 
-    def _get_bbox_filter(self, bbox):
-        if not bbox:
+    def _get_spatial_filter(self, bbox, bbox_crs, geom_wkt, geom_crs):
+
+        # If a geom is specified
+        query_shape = None
+        if geom_wkt:
+            # If a geom_crs is specified
+            if geom_crs:
+                # Make the polygon from wkt
+                query_shape = ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs))
+
+                # Project the geometry to the SRID of the table
+                query_shape = ST_Transform(query_shape, self.srid)
+
+            else:
+                # Make the polygon from wkt
+                query_shape = ST_PolygonFromText(geom_wkt)
+
+        elif bbox:
+            # If a bbox_crs is specified
+            if bbox_crs:
+                # Append the srid to the bbox coordinates
+                bbox.append(int(bbox_crs))
+
+                # Make the bbox envelope with the provided crs
+                query_shape = ST_MakeEnvelope(*bbox)
+
+                # Project the bbox's to the SRID of the table
+                query_shape = ST_Transform(query_shape, self.srid)
+
+            else:
+                # Make the bbox envelope assuming the same crs as the data
+                query_shape = ST_MakeEnvelope(*bbox)
+
+        else:
             return True  # Let everything through
 
-        # Convert bbx to SQL Alchemy clauses
-        envelope = ST_MakeEnvelope(*bbox)
         geom_column = getattr(self.table_model, self.geom)
-        bbox_filter = geom_column.intersects(envelope)
-
-        return bbox_filter
+        return geom_column.ST_Intersects(query_shape)
 
     def _select_properties_clause(self, select_properties, skip_geometry):
         # List the column names that we want

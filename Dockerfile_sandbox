@@ -106,7 +106,7 @@ WORKDIR /pygeoapi
 ADD . /pygeoapi
 
 # Set configuration for environment
-ARG AWS_ENV=dev
+ARG AWS_ENV=sandbox
 
 # Install operating system dependencies
 RUN \
@@ -138,38 +138,13 @@ RUN \
     && apt autoremove -y  \
     && rm -rf /var/lib/apt/lists/*
 
-# Install SSL and NGINX Configuration dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    jq \
-    curl \
-    awscli \
-    nginx-core && \
-    rm -rf /var/lib/apt/lists/*
-
-# Configure SSL
-RUN mkdir /gccp
-COPY ssl/get-ssl-cert.sh /gccp/get-ssl-cert.sh
-COPY ssl/run-get-ssl-cert.sh /gccp/run-get-ssl-cert.sh
-RUN chmod +x /gccp/run-get-ssl-cert.sh /gccp/get-ssl-cert.sh
-RUN /gccp/run-get-ssl-cert.sh
-RUN rm -rf /gccp
-
-# Configure NGINX
-RUN unlink /etc/nginx/sites-enabled/default
-COPY nginx/nginx.conf /etc/nginx/nginx.conf
-COPY nginx/server-api /etc/nginx/sites-available/server-api
-RUN ln -s /etc/nginx/sites-available/server-api /etc/nginx/sites-enabled/server-api
-
 # Set default config and entrypoint for Docker Image
 COPY docker/entrypoint.sh /entrypoint.sh
 COPY local.config.${AWS_ENV}.yml /pygeoapi/local.config.yml
 COPY local.openapi.${AWS_ENV}.yml /pygeoapi/local.openapi.yml
 
-# Set permissions and expose ports
-RUN chmod -R 1777 /pygeoapi && \
+# Set permissions
+RUN chmod 1777 /pygeoapi && \
     chown -R www-data:www-data /pygeoapi
-EXPOSE 443/tcp
 
-RUN chmod +x /entrypoint.sh
-
-CMD service nginx start && /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

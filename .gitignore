@@ -125,3 +125,9 @@ pygeoapi/db.sqlite3
 
 # Pycharm project files
 .idea
+
+/extractions
+/jobs/pygeoapi-process-manager.db
+/jobs
+/tests/data/open.canada.ca
+/extractions
