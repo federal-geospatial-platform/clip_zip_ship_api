@@ -477,3 +477,8 @@ class OutputCRSNotANumberException(ProviderPreconditionFailed):
     """Exception raised when output crs isn't a number"""
     def __init__(self):
         super().__init__("Input parameter 'out_crs' is not a number")
+
+class OutputCRSNotSupportedException(ProviderPreconditionFailed):
+    """Exception raised when output crs isn't supported"""
+    def __init__(self):
+        super().__init__("Input parameter 'out_crs' is not supported")

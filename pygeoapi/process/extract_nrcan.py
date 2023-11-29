@@ -37,7 +37,8 @@ from pygeoapi.process.extract import (
     CollectionsNotFoundException,
     ClippingAreaUndefinedException,
     ClippingAreaCrsUndefinedException,
-    OutputCRSNotANumberException
+    OutputCRSNotANumberException,
+    OutputCRSNotSupportedException
 )
 from pygeoapi import api_aws
 from pygeoapi.process.base import BaseProcessor, ProcessorExecuteError
@@ -218,10 +219,19 @@ class ExtractNRCanProcessor(ExtractProcessor):
             LOGGER.warning(err)
 
         if "out_crs" in data and data["out_crs"]:
+            # Store the crs
+            self.out_crs = data["out_crs"]
+
             # If a number
-            if isinstance(data["out_crs"], int) or data["out_crs"].isdigit():
-                # Store the crs
-                self.out_crs = int(data["out_crs"])
+            if isinstance(self.out_crs, int) or self.out_crs.isdigit():
+                # Store the crs as number
+                self.out_crs = int(self.out_crs)
+
+                # If a supported crs
+                if self.out_crs not in self.processor_def['settings']['supported_crs']:
+                    err = OutputCRSNotSupportedException()
+                    self.errors.append(err)
+                    LOGGER.warning(err)
 
             else:
                 err = OutputCRSNotANumberException()
@@ -237,7 +247,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         email = self.email
         if email and '@' in email:
             email = '@' + email.split('@')[1]
-        self.process_manager.update_job(self.job_id, {'collections': self.colls, 'email': email, 'geom': self.geom_wkt, 'geom_crs': self.geom_crs})
+        self.process_manager.update_job(self.job_id, {'collections': self.colls, 'email': email, 'geom': self.geom_wkt, 'geom_crs': self.geom_crs, 'out_crs': self.out_crs})
 
         # If no errors
         if not self.errors:
@@ -842,6 +852,10 @@ class ExtractNRCanProcessor(ExtractProcessor):
         elif isinstance(e, OutputCRSNotANumberException):
             return [str(e),  # English message works fine
                     f"Le paramètre d'entré 'out_crs' n'est pas un nombre"]
+
+        elif isinstance(e, OutputCRSNotSupportedException):
+            return [str(e),  # English message works fine
+                    f"Le paramètre d'entré 'out_crs' n'est pas supporté"]
 
         # If admin
         if admin:

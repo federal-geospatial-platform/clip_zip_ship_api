@@ -66,6 +66,7 @@ settings:
     extract_url: http://ftp.ftp-staging.services.geo.ca/pub/czs/
     catalogue_url: https://maps.canada.ca/geonetwork/srv/eng/csw?request=GetRecordById&service=CSW&version=2.0.2&elementSetName=full&outputSchema=http://www.isotc211.org/2005/gmd&typeNames=gmd:MD_Metadata&constraintLanguage=FILTER&id={metadata_uuid}
     secret_aws_key: /stage/cdtk_api_pygeoapi
+    supported_crs: [3857, 3978, 3979, 4269, 4326, 4617]
 
 resources:
     obs:
