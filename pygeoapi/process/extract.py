@@ -297,7 +297,8 @@ class ExtractProcessor(BaseProcessor):
                 'geom': geom_wkt,
                 'geom_crs': geom_crs,
                 'format_': 'native',
-                'out_crs': out_crs
+                'out_crs': out_crs,
+                'compression': 'lzw'
             }
             res = p.query(**query_args)
 

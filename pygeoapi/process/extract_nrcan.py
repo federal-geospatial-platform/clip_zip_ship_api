@@ -338,7 +338,7 @@ class ExtractNRCanProcessor(ExtractProcessor):
         self.send_emails(self.processor_def['settings']['email'], self.job_id, self.email, self.colls, self.geom_wkt, self.geom_crs, self.out_crs, self.extract_url, [], self.errors, None)
 
         # Now that it's copied on S3, delete local
-        #shutil.rmtree(f"./{EXTRACT_FOLDER}/{unique_key}", ignore_errors=True)
+        shutil.rmtree(f"./{EXTRACT_FOLDER}/{unique_key}", ignore_errors=True)
 
 
     def on_exception(self, exception: Exception):
