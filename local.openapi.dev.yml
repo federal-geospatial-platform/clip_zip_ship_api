@@ -263,6 +263,14 @@ components:
         type: string
       style: form
       explode: false
+    filter-lang:
+      name: filter-lang
+      description: The language of the filter. 'cql-text' by default.
+      in: query
+      required: false
+      schema:
+        type: string
+        example: cql-text
   responses:
     '200':
       description: successful operation
@@ -496,6 +504,7 @@ paths:
       - $ref: "#/components/parameters/geom"
       - $ref: "#/components/parameters/geom-crs"
       - $ref: "#/components/parameters/filter"
+      - $ref: "#/components/parameters/filter-lang"
       - $ref: https://demo.pygeoapi.io/master/schemas/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/parameters/limit
       - description: The properties that should be included for each feature. The parameter value is a comma-separated list of property names.
         explode: false
@@ -632,6 +641,7 @@ paths:
       - $ref: "#/components/parameters/geom"
       - $ref: "#/components/parameters/geom-crs"
       - $ref: "#/components/parameters/filter"
+      - $ref: "#/components/parameters/filter-lang"
       - $ref: https://demo.pygeoapi.io/master/schemas/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/parameters/limit
       - description: The properties that should be included for each feature. The parameter value is a comma-separated list of property names.
         explode: false

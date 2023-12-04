@@ -337,10 +337,13 @@ class RasterioProvider(BaseProvider):
                     LOGGER.error(err)
                     raise ProviderQueryError(err)
 
-                out_meta.update({'driver': self.native_format,
+                update_params = {'driver': self.native_format,
                                  'height': out_image.shape[1],
                                  'width': out_image.shape[2],
-                                 'transform': out_transform})
+                                 'transform': out_transform}
+                if 'compression' in kwargs:
+                    update_params['compress'] = kwargs['compression']
+                out_meta.update(update_params)
             else:  # no spatial subset
                 LOGGER.debug('Creating data in memory with band selection')
                 out_image = _data.read(indexes=args['indexes'])
@@ -383,7 +386,7 @@ class RasterioProvider(BaseProvider):
                         # Create destination memory file
                         with MemoryFile() as memfile_proj:
                             # Reproject
-                            self.reproject_data_to_memory_file(dest, memfile_proj, out_crs)
+                            self.reproject_data_to_memory_file(dest, memfile_proj, out_crs, kwargs['compression'])
 
                             # Return the reprojected image
                             return memfile_proj.read()
@@ -396,19 +399,22 @@ class RasterioProvider(BaseProvider):
                         dest.write(out_image)
                     return memfile.read()
 
-    def reproject_data_to_memory_file(self, dataset_src, memoryfile_dest: MemoryFile, out_crs: int):
+    def reproject_data_to_memory_file(self, dataset_src, memoryfile_dest: MemoryFile, out_crs: int, compression: str):
         # Create the CRS
         crs = CRS.from_epsg(out_crs)
         transform, width, height = calculate_default_transform(dataset_src.crs, crs, dataset_src.width, dataset_src.height, *dataset_src.bounds)
-        kwargs = dataset_src.meta.copy()
+        out_meta = dataset_src.meta.copy()
 
-        kwargs.update({
+        update_params = {
             'crs': crs,
             'transform': transform,
             'width': width,
-            'height': height})
+            'height': height}
+        if compression:
+            update_params['compress'] = compression
+        out_meta.update(update_params)
 
-        with memoryfile_dest.open(**kwargs) as dest_proj:
+        with memoryfile_dest.open(**out_meta) as dest_proj:
             for i in range(1, dataset_src.count + 1):
                 reproject(
                     source=rasterio.band(dataset_src, i),
