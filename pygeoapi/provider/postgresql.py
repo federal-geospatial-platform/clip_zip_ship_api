@@ -52,7 +52,8 @@ import logging
 
 from copy import deepcopy
 from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
-from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_PolygonFromText, ST_Intersection, ST_MakeValid
+from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_PolygonFromText, ST_Intersection, \
+    ST_MakeValid
 from geoalchemy2.shape import to_shape
 from pygeofilter.backends.sqlalchemy.evaluate import to_filter
 import pyproj
@@ -68,7 +69,6 @@ from pygeoapi.provider.base import BaseProvider, \
     ProviderConnectionError, ProviderQueryError, ProviderItemNotFoundError
 from pygeoapi.util import get_transform_from_crs, get_area_from_wkt_in_km2
 
-
 _ENGINE_STORE = {}
 _TABLE_MODEL_STORE = {}
 LOGGER = logging.getLogger(__name__)
@@ -79,6 +79,7 @@ class PostgreSQLProvider(BaseProvider):
     using sync approach and server side
     cursor (using support class DatabaseCursor)
     """
+
     def __init__(self, provider_def):
         """
         PostgreSQLProvider Class constructor
@@ -116,7 +117,11 @@ class PostgreSQLProvider(BaseProvider):
         LOGGER.debug('Fields: {}'.format(self.fields))
 
         # Read the table SRID
-        self.srid = self.get_srid()
+        # import web_pdb; web_pdb.set_trace()
+        if self._is_table_spatial():
+            self.srid = self.get_srid()
+        else:
+            self.srid = None
         LOGGER.debug('SRID: {}'.format(self.srid))
 
     def query(self, offset=0, limit=10, resulttype='results',
@@ -156,6 +161,7 @@ class PostgreSQLProvider(BaseProvider):
         :returns: GeoJSON FeatureCollection
         """
 
+        # import web_pdb; web_pdb.set_trace()
         LOGGER.debug('Preparing filters')
         property_filters = self._get_property_filters(properties)
         cql_filters = self._get_cql_filters(filterq)
@@ -184,17 +190,21 @@ class PostgreSQLProvider(BaseProvider):
                 out_crs = pyproj.CRS.from_wkt(crs_transform_spec.target_crs_wkt).to_epsg()
 
             if clip > 0 and geom_wkt:
-                results = (session.query(self.table_model, ST_Transform(ST_Intersection(getattr(self.table_model, self.geom),
-                                                                                        ST_Transform(ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs)), self.srid)
-                                                                                        ),
-                                                           out_crs).label('inters')
-                                        )
-                           .filter(property_filters)
-                           .filter(cql_filters)
-                           .filter(spat_filter)
-                           .order_by(*order_by_clauses)
-                           .options(selected_properties)
-                           .offset(offset))
+                results = (
+                    session.query(self.table_model, ST_Transform(ST_Intersection(getattr(self.table_model, self.geom),
+                                                                                 ST_Transform(ST_MakeValid(
+                                                                                     ST_PolygonFromText(geom_wkt,
+                                                                                                        geom_crs)),
+                                                                                              self.srid)
+                                                                                 ),
+                                                                 out_crs).label('inters')
+                                  )
+                    .filter(property_filters)
+                    .filter(cql_filters)
+                    .filter(spat_filter)
+                    .order_by(*order_by_clauses)
+                    .options(selected_properties)
+                    .offset(offset))
             else:
                 results = (session.query(self.table_model)
                            .filter(property_filters)
@@ -307,7 +317,7 @@ class PostgreSQLProvider(BaseProvider):
         srid = None
         with Session(self._engine) as session:
             srid = session.scalar(
-                       Find_SRID(self.schema, self.table, self.geom))
+                Find_SRID(self.schema, self.table, self.geom))
         return srid
 
     def get(self, identifier, crs_transform_spec=None, **kwargs):
@@ -367,6 +377,25 @@ class PostgreSQLProvider(BaseProvider):
         self.schema = self.db_search_path[0]
         self._db_password = parameters.get('password')
         self.db_options = options
+
+    def _is_table_spatial(self):
+        """
+        Test if a table is spatial by checking if he table name is present
+        in the geometry_column table
+        """
+
+        with Session(self._engine) as session:
+            sql = f"SELECT count(*) FROM geometry_columns " \
+                  f"                WHERE f_table_schema = '{self.schema}' and " \
+                  f"                      f_table_name = '{self.table}';"
+            result = session.execute(sql)
+            nb_rows = result.scalar()
+            if nb_rows != 0:
+                is_spatial = True  # Cursor is empty (the table is not spatial)
+            else:
+                is_spatial = False
+
+        return is_spatial
 
     def _get_engine_and_table_model(self):
         """
@@ -457,7 +486,7 @@ class PostgreSQLProvider(BaseProvider):
 
     @staticmethod
     def _name_for_scalar_relationship(
-        base, local_cls, referred_cls, constraint,
+            base, local_cls, referred_cls, constraint,
     ):
         """Function used when automapping classes and relationships from
         database schema and fixes potential naming conflicts.
@@ -539,39 +568,43 @@ class PostgreSQLProvider(BaseProvider):
 
     def _get_spatial_filter(self, bbox, bbox_crs, geom_wkt, geom_crs):
 
-        # If a geom is specified
-        query_shape = None
-        if geom_wkt:
-            # If a geom_crs is specified
-            if geom_crs:
-                # Make the polygon from wkt
-                query_shape = ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs))
+        if self.srid:
+            # If a geom is specified
+            query_shape = None
+            if geom_wkt:
+                # If a geom_crs is specified
+                if geom_crs:
+                    # Make the polygon from wkt
+                    query_shape = ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs))
 
-                # Project the geometry to the SRID of the table
-                query_shape = ST_Transform(query_shape, self.srid)
+                    # Project the geometry to the SRID of the table
+                    query_shape = ST_Transform(query_shape, self.srid)
+
+                else:
+                    # Make the polygon from wkt
+                    query_shape = ST_PolygonFromText(geom_wkt)
+
+            elif bbox:
+                # If a bbox_crs is specified
+                if bbox_crs:
+                    # Append the srid to the bbox coordinates
+                    bbox.append(int(bbox_crs))
+
+                    # Make the bbox envelope with the provided crs
+                    query_shape = ST_MakeEnvelope(*bbox)
+
+                    # Project the bbox's to the SRID of the table
+                    query_shape = ST_Transform(query_shape, self.srid)
+
+                else:
+                    # Make the bbox envelope assuming the same crs as the data
+                    query_shape = ST_MakeEnvelope(*bbox)
 
             else:
-                # Make the polygon from wkt
-                query_shape = ST_PolygonFromText(geom_wkt)
-
-        elif bbox:
-            # If a bbox_crs is specified
-            if bbox_crs:
-                # Append the srid to the bbox coordinates
-                bbox.append(int(bbox_crs))
-
-                # Make the bbox envelope with the provided crs
-                query_shape = ST_MakeEnvelope(*bbox)
-
-                # Project the bbox's to the SRID of the table
-                query_shape = ST_Transform(query_shape, self.srid)
-
-            else:
-                # Make the bbox envelope assuming the same crs as the data
-                query_shape = ST_MakeEnvelope(*bbox)
+                return True  # Let everything through
 
         else:
-            return True  # Let everything through
+            return True  # No SRID ==> No geometry ==> No spatial filtering
 
         geom_column = getattr(self.table_model, self.geom)
         return geom_column.ST_Intersects(query_shape)
