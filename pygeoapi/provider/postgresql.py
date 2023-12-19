@@ -514,13 +514,18 @@ class PostgreSQLProvider(BaseProvider):
         feature['id'] = item_dict.pop(self.id_field)
 
         # Convert geometry to GeoJSON style
+
+#        import web_pdb; web_pdb.set_trace()
         if feature['properties'].get(self.geom):
             wkb_geom = feature['properties'].pop(self.geom)
             shapely_geom = to_shape(wkb_geom)
-            if crs_transform_out is not None:
-                shapely_geom = crs_transform_out(shapely_geom)
-            geojson_geom = shapely.geometry.mapping(shapely_geom)
-            feature['geometry'] = geojson_geom
+            if not shapely_geom.is_empty:
+                if crs_transform_out is not None:
+                    shapely_geom = crs_transform_out(shapely_geom)
+                geojson_geom = shapely.geometry.mapping(shapely_geom)
+                feature['geometry'] = geojson_geom
+            else:
+                feature['geometry'] = None
         else:
             feature['geometry'] = None
 
