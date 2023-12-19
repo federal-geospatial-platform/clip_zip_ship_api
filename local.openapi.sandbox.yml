@@ -2,7 +2,7 @@ openapi: 3.0.2
 servers:
 - description: NRCan's implementation of the PyGeoAPI to provide an API to NRCan's
     geospatial data
-  url: https://czs-pygeoapi.ddr-stage.services.geo.ca
+  url: https://czs-pygeoapi.ddr-dev.services.geo.ca
 tags:
 - description: NRCan's implementation of the PyGeoAPI to provide an API to NRCan's
     geospatial data
@@ -22,7 +22,7 @@ info:
     url: https://creativecommons.org/licenses/by/4.0/
   termsOfService: https://creativecommons.org/licenses/by/4.0/
   title: PyGeoAPI for NRCan collections
-  version: 0.2.2
+  version: v0.2.5
   x-keywords:
   - geospatial
   - data
