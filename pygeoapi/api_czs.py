@@ -235,10 +235,10 @@ class API_CZS(API):
         if 'org_schema' in input_coll:
             active_coll['org_schema'] = input_coll['org_schema']
 
-        # If specific collection requested, add the wkt
-        if len(collections.items()) == 1:
-            if 'wkt' in input_coll:
-                active_coll['wkt'] = input_coll['wkt']
+        ## If specific collection requested, add the wkt
+        #if len(collections.items()) == 1:
+        #    if 'wkt' in input_coll:
+        #        active_coll['wkt'] = input_coll['wkt']
 
         if 'providers' in input_coll and 'crs' in input_coll["providers"][0]:
             active_coll['crs'] = input_coll["providers"][0]["crs"]
