@@ -236,7 +236,7 @@ class API_CZS(API):
             active_coll['org_schema'] = input_coll['org_schema']
 
         # If specific collection requested, add the wkt
-        if len(collections.items()) == 1:
+        if len(collections.items()) == 1 and active_coll['id']:
             # Open the connection
             with open_conn(self.config["settings"]["database"]) as conn:
                 # Query wkt for the collection
