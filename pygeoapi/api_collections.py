@@ -262,7 +262,6 @@ def fetch_collections(conn):
     # Open a cursor
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         # Select query
-        #sql_query = "SELECT *, ST_AsText(geom) as wkt FROM {table_coll} ORDER BY {order_field}"
         sql_query = "SELECT * FROM {table_coll} ORDER BY {order_field}"
 
         # Execute statement
@@ -271,6 +270,18 @@ def fetch_collections(conn):
 
         # Fetch and return
         return cur.fetchall()
+
+
+def get_wkt_collection(conn, collection_id):
+    
+    # Open a cursor
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        # Select query
+        cur.execute(sql.SQL("SELECT ST_AsText(geom) as wkt FROM {table_coll}").format(
+            table_coll=sql.Identifier(conn.info.dbname, "czs_collection")))
+
+        # Fetch and return
+        return cur.fetchone()["wkt"]
 
 
 def get_flag_reload_resources(conn):
