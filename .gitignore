@@ -126,6 +126,12 @@ pygeoapi/db.sqlite3
 # Pycharm project files
 .idea
 
+# ES data folder
+.pygeoapi/docker/examples/elastic/ES/data
+.pygeoapi/docker/examples/mvt-elastic/ES/data
+.pygeoapi/docker/examples/mvt-tippecanoe/ES/data
+.idea
+
 /extractions
 /jobs/pygeoapi-process-manager.db
 /jobs

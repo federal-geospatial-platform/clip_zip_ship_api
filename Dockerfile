@@ -9,6 +9,7 @@
 # Copyright (c) 2019 Just van den Broecke
 # Copyright (c) 2020 Francesco Bartoli
 # Copyright (c) 2021 Angelos Tzotsos
+# Copyright (c) 2023 Bernhard Mallinger
 #
 # Permission is hereby granted, free of charge, to any person
 # obtaining a copy of this software and associated documentation
@@ -67,6 +68,7 @@ ARG ADD_DEB_PACKAGES="\
     python3-elasticsearch \
     python3-fiona \
     python3-gdal \
+    python3-jsonpatch \
     python3-netcdf4 \
     python3-pandas \
     python3-psycopg2 \
@@ -103,7 +105,6 @@ ENV TZ=${TZ} \
     ${ADD_DEB_PACKAGES}"
 
 WORKDIR /pygeoapi
-ADD . /pygeoapi
 
 # Set configuration for environment
 ARG AWS_ENV=dev
@@ -111,7 +112,6 @@ ARG AWS_ENV=dev
 # Install operating system dependencies
 RUN \
     apt-get update -y \
-    && apt-get upgrade -y \
     && apt-get --no-install-recommends install -y ${DEB_PACKAGES} ${DEB_BUILD_DEPS}  \
     && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8 \
     && echo "For ${TZ} date=$(date)" && echo "Locale=$(locale)"  \
@@ -130,9 +130,12 @@ RUN \
     && pip3 install -r requirements-docker.txt \
 
     # Install pygeoapi
-    && pip3 install -e . \
+    && pip3 install --no-cache-dir -e . \
 
     # Cleanup TODO: remove unused Locales and TZs
+    # NOTE: this tries to remove gcc, but the actual package gcc-11 can't be
+    #       removed because python3-scipy depends on python3-pythran which
+    #       depends on g++
     && apt-get remove --purge -y gcc ${DEB_BUILD_DEPS} \
     && apt-get clean \
     && apt autoremove -y  \
