@@ -8,6 +8,7 @@ Flask-Cors
 #jinja
 jinja2==3.0.3
 jsonschema
+jsonpatch
 pydantic
 pygeofilter
 pygeoif
