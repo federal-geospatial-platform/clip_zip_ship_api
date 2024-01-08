@@ -35,6 +35,10 @@ class API_CZS(API):
         :returns: the resources that PyGeoAPI should work with
         """
 
+        # Precond for the GitHub automated testing running vanilla
+        if "settings" not in self.config:
+            return super().on_load_resources(resources)
+
         # Reads the AWS Secrets manager to retrieve sensitive parameters
         aws_secrets = api_aws.get_secret("ca-central-1", "secretsmanager",
                                          self.config["settings"]["secret_aws_key"])  # noqa
@@ -130,6 +134,10 @@ class API_CZS(API):
         the resources manually here, the API mother class will do it)
         """
 
+        # Precond for the GitHub automated testing running vanilla
+        if "settings" not in self.config:
+            return super().on_load_resources_check(last_loaded_resources)
+
         # Open the connection
         with open_conn(self.config["settings"]["database"]) as conn:
             # Check if the date of last load is prior
@@ -165,6 +173,10 @@ class API_CZS(API):
         # print("on_description_filter_spatially: filtering?=" + ('true' if geom_wkt else 'false'))  # noqa
         # print("Count before: " + str(len(collections)))
 
+        # Precond for the GitHub automated testing running vanilla
+        if "settings" not in self.config:
+            return super().on_description_filter_spatially(collections, geom_wkt, geom_crs)  # noqa
+
         # If filtering spatially using a wkt
         if geom_wkt:
             # Filtering
@@ -199,6 +211,13 @@ class API_CZS(API):
         """
 
         # print("on_build_collection_finalize : "  + collection_data_type + " : " + active_coll['title'])  # noqa
+
+        # Precond for the GitHub automated testing running vanilla
+        if "settings" not in self.config:
+            return super().on_build_collection_finalize(locale, collections,
+                                                        collection_data_type,
+                                                        input_coll,
+                                                        active_coll)
 
         # Add the theme information to the output
         if 'theme' in input_coll:
