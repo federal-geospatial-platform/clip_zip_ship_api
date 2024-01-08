@@ -31,7 +31,7 @@ import logging
 
 from pygeoapi.process.base import BaseProcessor
 from pygeoapi.provider.base import ProviderPreconditionFailed
-from pygeoapi.util import (get_provider_by_type, get_crs_from_uri, CrsTransformSpec)
+from pygeoapi.util import (get_provider_by_type, get_crs_from_uri, CrsTransformSpec)  # noqa
 from pygeoapi.plugin import load_plugin
 
 LOGGER = logging.getLogger(__name__)
@@ -273,10 +273,10 @@ class ExtractProcessor(BaseProcessor):
 
                 # The crs transform spec
                 crs_trans_spec = CrsTransformSpec(
-                    source_crs_uri= source_uri,
-                    source_crs_wkt= source_crs.to_wkt(),
-                    target_crs_uri= target_uri,
-                    target_crs_wkt= target_crs.to_wkt()
+                    source_crs_uri=source_uri,
+                    source_crs_wkt=source_crs.to_wkt(),
+                    target_crs_uri=target_uri,
+                    target_crs_wkt=target_crs.to_wkt()
                 )
 
             # Query using the provider logic and clip = True!
@@ -474,10 +474,12 @@ class ClippingAreaCrsUndefinedException(ProviderPreconditionFailed):
     def __init__(self):
         super().__init__("Input parameter 'geom_crs' is undefined")
 
+
 class OutputCRSNotANumberException(ProviderPreconditionFailed):
     """Exception raised when output crs isn't a number"""
     def __init__(self):
         super().__init__("Input parameter 'out_crs' is not a number")
+
 
 class OutputCRSNotSupportedException(ProviderPreconditionFailed):
     """Exception raised when output crs isn't supported"""

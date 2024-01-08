@@ -1,15 +1,11 @@
-import sys, os, logging, json, requests
-from dateutil.parser import parse
-from urllib.parse import urlparse
+import os  # noqa: E401
 from http import HTTPStatus
 from typing import Any, Tuple, Union
-from configparser import ConfigParser
-import json, ast, yaml, psycopg2
+import psycopg2
 import psycopg2.extras
-from psycopg2 import sql
 from pygeoapi.linked_data import jsonldify
 from pygeoapi.api import API, APIRequest, pre_process
-from pygeoapi.util import (to_json, yaml_load)
+from pygeoapi.util import to_json
 from pygeoapi import api_collections
 from pygeoapi import api_aws
 from copy import deepcopy
@@ -29,10 +25,10 @@ class API_CZS(API):
         self.secret_aws_keys = {}
         super().__init__(config, openapi)
 
-
     def on_load_resources(self, resources):
         """
-        Performs our own dynamic load of the available resources from the Clip Zip Ship database.
+        Performs our own dynamic load of the available resources from the
+        Clip Zip Ship database.
 
         :param resources: the resources as PyGeoAPI would typically work with
 
@@ -40,18 +36,19 @@ class API_CZS(API):
         """
 
         # Reads the AWS Secrets manager to retrieve sensitive parameters
-        aws_secrets = api_aws.get_secret("ca-central-1", "secretsmanager", self.config["settings"]["secret_aws_key"])
+        aws_secrets = api_aws.get_secret("ca-central-1", "secretsmanager",
+                                         self.config["settings"]["secret_aws_key"])  # noqa
         self.config["settings"]["database"] = aws_secrets["database"]
         self.config["settings"]["email"] = aws_secrets["email"]
         self.config["settings"]["s3"] = aws_secrets["s3"]
 
         # Set the manager config on-the-fly as well
         self.config["server"]["manager"]["connection"] = {}
-        self.config["server"]["manager"]["connection"]["host"] = aws_secrets["database"]["host"]
-        self.config["server"]["manager"]["connection"]["port"] = aws_secrets["database"]["port"]
-        self.config["server"]["manager"]["connection"]["dbname"] = aws_secrets["database"]["dbname"]
-        self.config["server"]["manager"]["connection"]["user"] = aws_secrets["database"]["user"]
-        self.config["server"]["manager"]["connection"]["password"] = aws_secrets["database"]["password"]
+        self.config["server"]["manager"]["connection"]["host"] = aws_secrets["database"]["host"]  # noqa
+        self.config["server"]["manager"]["connection"]["port"] = aws_secrets["database"]["port"]  # noqa
+        self.config["server"]["manager"]["connection"]["dbname"] = aws_secrets["database"]["dbname"]  # noqa
+        self.config["server"]["manager"]["connection"]["user"] = aws_secrets["database"]["user"]  # noqa
+        self.config["server"]["manager"]["connection"]["password"] = aws_secrets["database"]["password"]  # noqa
 
         # Open the connection
         with open_conn(self.config["settings"]["database"]) as conn:
@@ -68,15 +65,15 @@ class API_CZS(API):
                 # If not already loaded
                 if not d["collection_name"] in the_resources:
                     # Get the template
-                    thisTemplate = api_collections.tableTemplateDict[d['provider_type']]
+                    thisTemplate = api_collections.tableTemplateDict[d['provider_type']]  # noqa
 
                     # Depending on the feature
                     if d['provider_type'] == "feature":
                         # Check if we've fetched this secret aws key before
                         sec_key = d['data_secret_aws_key']
-                        if not sec_key in self.secret_aws_keys:
+                        if sec_key not in self.secret_aws_keys:
                             # Fetch the secret value
-                            sec_val = api_aws.get_secret("ca-central-1", "secretsmanager", sec_key)
+                            sec_val = api_aws.get_secret("ca-central-1", "secretsmanager", sec_key)  # noqa
 
                             # Store it
                             self.secret_aws_keys[sec_key] = {
@@ -91,19 +88,19 @@ class API_CZS(API):
                         d2 = {**d, **self.secret_aws_keys[sec_key]}
 
                         # Load template for Postgres
-                        providerDict = api_collections.load_template_postgres(thisTemplate, d2)
+                        providerDict = api_collections.load_template_postgres(thisTemplate, d2)  # noqa
 
                     elif d['provider_type'] == "coverage":
                         # Load template for Coverage
-                        providerDict = api_collections.load_template_rasterio(thisTemplate, d)
+                        providerDict = api_collections.load_template_rasterio(thisTemplate, d)  # noqa
 
                     # If loading anything
                     if providerDict:
-                        the_resources[d["collection_name"]] = deepcopy(providerDict)
+                        the_resources[d["collection_name"]] = deepcopy(providerDict)  # noqa
 
                 else:
                     print("Collection already loaded: " + d["collection_name"])
-                    #pass # Already loaded this resource key
+                    # pass # Already loaded this resource key
 
         # Add our custom process dynamically
         the_resources['extract'] = {
@@ -119,23 +116,28 @@ class API_CZS(API):
         # Return the resources
         return the_resources
 
-
     def on_load_resources_check(self, last_loaded_resources):
         """
-        Overrides the check if the resources should be reloaded for the currently running instance of pygeoapi.
-        This is useful as pygeoapi can be distributed (load balanced) on multiple instances with their own allocated memory for their resources.
+        Overrides the check if the resources should be reloaded for the
+        currently running instance of pygeoapi.
+        This is useful as pygeoapi can be distributed (load balanced) on
+        multiple instances with their own allocated memory for their resources.
 
-        :param last_loaded_resources: the UTC date of the last time the resources were loaded on this particular pygeoapi instance.
+        :param last_loaded_resources: the UTC date of the last time the
+        resources were loaded on this particular pygeoapi instance.
 
-        :returns: True if the resources should be reloaded (no need to reload the resources manually here, the API mother class will do it)
+        :returns: True if the resources should be reloaded (no need to reload
+        the resources manually here, the API mother class will do it)
         """
 
         # Open the connection
         with open_conn(self.config["settings"]["database"]) as conn:
-            # Check if the date of last load is prior to the date in the database
+            # Check if the date of last load is prior
+            # to the date in the database
             date_loaded = api_collections.get_flag_reload_resources(conn)
 
-            # If the date last loaded on the pygeoapi instance is prior to date in the database
+            # If the date last loaded on the pygeoapi instance is prior
+            # to date in the database
             print(f'{os.getpid()} - Date last load - {last_loaded_resources}')
 
             if last_loaded_resources < date_loaded:
@@ -147,20 +149,21 @@ class API_CZS(API):
         print(f'{os.getpid()} - No need to reload collections')
         return False
 
-
     def on_description_filter_spatially(self, collections, geom_wkt, geom_crs):
         """
-        Performs our own spatial filter to filter the collections based on a geometry wkt.
+        Performs our own spatial filter to filter the collections based on a
+        geometry wkt.
 
-        :param collections: the collections as PyGeoAPI would typically respond with
+        :param collections: the collections as PyGeoAPI would typically
+        respond with
         :param geom_wkt: the geometry wkt on which to filter the collections
         :param geom_crs: The geometry crs for the related geometry wkt
 
         :returns: the spatially filtered collections (if actually filtering)
         """
 
-        # print("on_description_filter_spatially: filtering?=" + ('true' if geom_wkt else 'false'))
-        #print("Count before: " + str(len(collections)))
+        # print("on_description_filter_spatially: filtering?=" + ('true' if geom_wkt else 'false'))  # noqa
+        # print("Count before: " + str(len(collections)))
 
         # If filtering spatially using a wkt
         if geom_wkt:
@@ -168,8 +171,8 @@ class API_CZS(API):
             # Open the connection
             with open_conn(self.config["settings"]["database"]) as conn:
                 # Query the collections intersecting with the bbox
-                collections_in_bbox = api_collections.query_collections(conn, geom_wkt, geom_crs, 4617)
-                collection_names_in_bbox = [o["collection_name"] for o in collections_in_bbox]
+                collections_in_bbox = api_collections.query_collections(conn, geom_wkt, geom_crs, 4617)  # noqa
+                collection_names_in_bbox = [o["collection_name"] for o in collections_in_bbox]  # noqa
 
                 # Filter to only keep the collections intersecting the bbox
                 collections_filtered = {}
@@ -179,13 +182,15 @@ class API_CZS(API):
                 collections = collections_filtered
 
         # Return the filtered collections list
-        #print("Count after: " + str(len(collections)))
+        # print("Count after: " + str(len(collections)))
         return collections
 
-
-    def on_build_collection_finalize(self, locale, collections, collection_data_type, input_coll, active_coll):
+    def on_build_collection_finalize(self, locale, collections,
+                                     collection_data_type, input_coll,
+                                     active_coll):
         """
-        Performs some additional processing to group the collections by parents and themes.
+        Performs some additional processing to group the collections by parents
+        and themes.
 
         :param locale: The language
         :param collection_data_type: The collection type
@@ -193,13 +198,13 @@ class API_CZS(API):
         :param active_coll: The current collection being finalized
         """
 
-        # print("on_build_collection_finalize : "  + collection_data_type + " : " + active_coll['title'])
+        # print("on_build_collection_finalize : "  + collection_data_type + " : " + active_coll['title'])  # noqa
 
         # Add the theme information to the output
         if 'theme' in input_coll:
             if isinstance(input_coll['theme'], dict):
                 # Depending on the language
-                #active_coll['theme_id'] = input_coll['theme']['id']
+                # active_coll['theme_id'] = input_coll['theme']['id']
                 active_coll['theme'] = input_coll['theme']['en']
                 if str(locale) == 'fr_CA':
                     active_coll['theme'] = input_coll['theme']['fr']
@@ -210,7 +215,7 @@ class API_CZS(API):
         if 'parent' in input_coll:
             if isinstance(input_coll['parent'], dict):
                 # Depending on the language
-                #active_coll['parent_id'] = input_coll['parent']['id']
+                # active_coll['parent_id'] = input_coll['parent']['id']
                 active_coll['parent'] = input_coll['parent']['en']
                 if str(locale) == 'fr_CA':
                     active_coll['parent'] = input_coll['parent']['fr']
@@ -221,10 +226,10 @@ class API_CZS(API):
         if 'parent_title' in input_coll:
             if isinstance(input_coll['parent_title'], dict):
                 # Depending on the language
-                #active_coll['parent_id'] = input_coll['parent']['id']
+                # active_coll['parent_id'] = input_coll['parent']['id']
                 active_coll['parent_title'] = input_coll['parent_title']['en']
                 if str(locale) == 'fr_CA':
-                    active_coll['parent_title'] = input_coll['parent_title']['fr']
+                    active_coll['parent_title'] = input_coll['parent_title']['fr']  # noqa
 
             else:
                 active_coll['parent_title'] = input_coll['parent_title']
@@ -240,18 +245,17 @@ class API_CZS(API):
             # Open the connection
             with open_conn(self.config["settings"]["database"]) as conn:
                 # Query wkt for the collection
-                active_coll['wkt'] = api_collections.get_wkt_collection(conn, active_coll['id'])
+                active_coll['wkt'] = api_collections.get_wkt_collection(conn, active_coll['id'])  # noqa
 
         if 'providers' in input_coll and 'crs' in input_coll["providers"][0]:
             active_coll['crs'] = input_coll["providers"][0]["crs"]
 
-        if 'providers' in input_coll and 'max_extract_area' in input_coll["providers"][0]:
-            active_coll['max_extract_area'] = input_coll["providers"][0]['max_extract_area']
-
+        if 'providers' in input_coll and 'max_extract_area' in input_coll["providers"][0]:  # noqa
+            active_coll['max_extract_area'] = input_coll["providers"][0]['max_extract_area']  # noqa
 
     @pre_process
     @jsonldify
-    def reload_resources(self, request: Union[APIRequest, Any]) -> Tuple[dict, int, str]:
+    def reload_resources(self, request: Union[APIRequest, Any]) -> Tuple[dict, int, str]:  # noqa
         """
         Reloads the resources.
 
@@ -263,19 +267,22 @@ class API_CZS(API):
 
         # Open the connection
         with open_conn(self.config["settings"]["database"]) as conn:
-            # Indicate that the resources should be reloaded by flagging it in the database.
-            # That way, any/all pygeoapi spawn instances which use the collections in their memory will reload
+            # Indicate that the resources should be reloaded by flagging it in
+            # the database.
+            # That way, any/all pygeoapi spawn instances which use the
+            # collections in their memory will reload
             # prior to responding on their next call
             the_date = datetime.now(timezone.utc)
             api_collections.update_flag_reload_resources(conn, the_date)
             conn.commit()
 
-        return headers, HTTPStatus.OK, to_json({"reloaded": True, "date": the_date}, self.pretty_print)
+        return headers, HTTPStatus.OK, to_json({"reloaded": True, "date": the_date}, self.pretty_print)  # noqa
 
 
 def open_conn(database):
     """
-    Connects to the Clip Zip Ship database which holds the collections informations.
+    Connects to the Clip Zip Ship database which holds the collections
+    informations.
 
     :returns: A :class:`~psycopg2` connection
     """
@@ -287,4 +294,3 @@ def open_conn(database):
                             host=database["host"],
                             port=database["port"],
                             database=database["dbname"])
-

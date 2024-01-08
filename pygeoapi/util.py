@@ -731,7 +731,7 @@ def get_area_from_wkt_in_km2(geom_wkt: str, geom_crs: int):
 
     # If the shape is invalid
     if not shapely_geom.is_valid:
-        # Use a shapely trick to try to untwist the polygon https://shapely.readthedocs.io/en/stable/manual.html#object.buffer
+        # Use a shapely trick to try to untwist the polygon https://shapely.readthedocs.io/en/stable/manual.html#object.buffer  # noqa
         shapely_geom = shapely_geom.buffer(0)
 
     # Return the area

@@ -52,8 +52,8 @@ import logging
 
 from copy import deepcopy
 from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
-from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, ST_PolygonFromText, ST_Intersection, \
-    ST_MakeValid
+from geoalchemy2.functions import ST_MakeEnvelope, ST_Transform, Find_SRID, \
+     ST_PolygonFromText, ST_Intersection, ST_MakeValid
 from geoalchemy2.shape import to_shape
 from pygeofilter.backends.sqlalchemy.evaluate import to_filter
 import pyproj
@@ -97,7 +97,7 @@ class PostgreSQLProvider(BaseProvider):
         self.table = provider_def['table']
         self.id_field = provider_def['id_field']
         self.geom = provider_def.get('geom_field', 'geom')
-        self.max_extract_area_km_2 = provider_def['max_extract_area'] if 'max_extract_area' in provider_def else 1000
+        self.max_extract_area_km_2 = provider_def['max_extract_area'] if 'max_extract_area' in provider_def else 1000  # noqa
 
         LOGGER.debug(f'Name: {self.name}')
         LOGGER.debug(f'Table: {self.table}')
@@ -117,7 +117,6 @@ class PostgreSQLProvider(BaseProvider):
         LOGGER.debug('Fields: {}'.format(self.fields))
 
         # Read the table SRID
-        # import web_pdb; web_pdb.set_trace()
         if self._is_table_spatial():
             self.srid = self.get_srid()
         else:
@@ -161,11 +160,10 @@ class PostgreSQLProvider(BaseProvider):
         :returns: GeoJSON FeatureCollection
         """
 
-        # import web_pdb; web_pdb.set_trace()
         LOGGER.debug('Preparing filters')
         property_filters = self._get_property_filters(properties)
         cql_filters = self._get_cql_filters(filterq)
-        spat_filter = self._get_spatial_filter(bbox, bbox_crs, geom_wkt, geom_crs)
+        spat_filter = self._get_spatial_filter(bbox, bbox_crs, geom_wkt, geom_crs)  # noqa
         order_by_clauses = self._get_order_by_clauses(sortby, self.table_model)
         selected_properties = self._select_properties_clause(select_properties,
                                                              skip_geometry)
@@ -174,30 +172,30 @@ class PostgreSQLProvider(BaseProvider):
 
         # Execute query within self-closing database Session context
         with Session(self._engine) as session:
-            ##### NRCAN SPECIFIC START
+            # #### NRCAN SPECIFIC START
             # If there's a geometry for the request
             if geom_wkt:
                 # If the area is valid
-                if get_area_from_wkt_in_km2(geom_wkt, geom_crs) <= self.max_extract_area_km_2:
+                if get_area_from_wkt_in_km2(geom_wkt, geom_crs) <= self.max_extract_area_km_2:  # noqa
                     # Limit can be infinite
                     print("Override the limit!")
                     limit = 1000000000
-            ##### NRCAN SPECIFIC END
+            # #### NRCAN SPECIFIC END
 
             out_crs = self.srid
             crs_transform_out = self._get_crs_transform(crs_transform_spec)
             if crs_transform_out:
-                out_crs = pyproj.CRS.from_wkt(crs_transform_spec.target_crs_wkt).to_epsg()
+                out_crs = pyproj.CRS.from_wkt(crs_transform_spec.target_crs_wkt).to_epsg()  # noqa
 
             if clip > 0 and geom_wkt:
                 results = (
-                    session.query(self.table_model, ST_Transform(ST_Intersection(getattr(self.table_model, self.geom),
-                                                                                 ST_Transform(ST_MakeValid(
-                                                                                     ST_PolygonFromText(geom_wkt,
-                                                                                                        geom_crs)),
-                                                                                              self.srid)
-                                                                                 ),
-                                                                 out_crs).label('inters')
+                    session.query(self.table_model, ST_Transform(ST_Intersection(getattr(self.table_model, self.geom),  # noqa
+                                                                                 ST_Transform(ST_MakeValid(  # noqa
+                                                                                     ST_PolygonFromText(geom_wkt,  # noqa
+                                                                                                        geom_crs)),  # noqa
+                                                                                              self.srid)  # noqa
+                                                                                 ),  # noqa
+                                                                 out_crs).label('inters')  # noqa
                                   )
                     .filter(property_filters)
                     .filter(cql_filters)
@@ -242,9 +240,10 @@ class PostgreSQLProvider(BaseProvider):
             for item in results.limit(limit):
                 if clip > 0 and geom_wkt:
                     # Default to feature, with item[0]
-                    obj = self._sqlalchemy_to_feature(item[0], crs_transform_out)
+                    obj = self._sqlalchemy_to_feature(item[0], crs_transform_out)  # noqa
 
-                    # Do more with say item[1] (clipped geometry already in correct reference system)
+                    # Do more with say item[1] (clipped geometry already in
+                    # correct reference system)
                     shapely_geom = to_shape(item[1])
                     geojson_geom = shapely.geometry.mapping(shapely_geom)
 
@@ -386,8 +385,8 @@ class PostgreSQLProvider(BaseProvider):
 
         with Session(self._engine) as session:
             sql = f"SELECT count(*) FROM geometry_columns " \
-                  f"                WHERE f_table_schema = '{self.schema}' and " \
-                  f"                      f_table_name = '{self.table}';"
+                  f"                WHERE f_table_schema = '{self.schema}'" \
+                  f"                      AND f_table_name = '{self.table}';"
             result = session.execute(sql)
             nb_rows = result.scalar()
             if nb_rows != 0:
@@ -514,8 +513,6 @@ class PostgreSQLProvider(BaseProvider):
         feature['id'] = item_dict.pop(self.id_field)
 
         # Convert geometry to GeoJSON style
-
-#        import web_pdb; web_pdb.set_trace()
         if feature['properties'].get(self.geom):
             wkb_geom = feature['properties'].pop(self.geom)
             shapely_geom = to_shape(wkb_geom)
@@ -580,7 +577,7 @@ class PostgreSQLProvider(BaseProvider):
                 # If a geom_crs is specified
                 if geom_crs:
                     # Make the polygon from wkt
-                    query_shape = ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs))
+                    query_shape = ST_MakeValid(ST_PolygonFromText(geom_wkt, geom_crs))  # noqa
 
                     # Project the geometry to the SRID of the table
                     query_shape = ST_Transform(query_shape, self.srid)

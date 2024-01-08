@@ -3,7 +3,8 @@ This module offers functions to communicate with AWS services
 """
 
 # 3rd party imports
-import os, boto3, botocore, json
+import boto3, botocore, json  # noqa: E401
+
 
 def get_secret(region: str, service_name: str, secret_key: str):
     # Create a Secrets Manager client
@@ -25,9 +26,11 @@ def get_secret(region: str, service_name: str, secret_key: str):
     # Decrypts secret using the associated KMS key.
     return json.loads(get_secret_value_response['SecretString'])
 
-def connect_s3_send_file(source_file: str, iam_role: str, bucket_name: str, prefix: str, file: str):
+
+def connect_s3_send_file(source_file: str, iam_role: str, bucket_name: str,
+                         prefix: str, file: str):
     """
-    Uploads the given file to an S3 Bucket, given an iam_role and a bucket name.
+    Uploads the given file to an S3 Bucket, given an iam_role and a bucket name
     """
 
     try:
@@ -35,7 +38,8 @@ def connect_s3_send_file(source_file: str, iam_role: str, bucket_name: str, pref
         # STS service
         sts_client = boto3.client('sts')
 
-        # Call the assume_role method of the STSConnection object and pass the role
+        # Call the assume_role method of the STSConnection object and pass the
+        # role
         # ARN and a role session name.
         assumed_role_object = sts_client.assume_role(
             RoleArn=iam_role,
@@ -52,7 +56,7 @@ def connect_s3_send_file(source_file: str, iam_role: str, bucket_name: str, pref
             's3',
             aws_access_key_id=credentials['AccessKeyId'],
             aws_secret_access_key=credentials['SecretAccessKey'],
-            aws_session_token= credentials['SessionToken']
+            aws_session_token=credentials['SessionToken']
         )
 
         # Make sure it ends with a "/"

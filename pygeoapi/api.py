@@ -38,10 +38,12 @@
 Returns content from plugins and sets responses.
 """
 
-import asyncio, yaml
+import os
+import asyncio
+import yaml
 from collections import OrderedDict
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import (datetime, timezone)
 from functools import partial
 from gzip import compress
 from http import HTTPStatus
@@ -74,8 +76,8 @@ from pygeoapi.process.manager.base import get_manager
 from pygeoapi.plugin import load_plugin, PLUGINS
 from pygeoapi.provider.base import (
     ProviderGenericError, ProviderConnectionError, ProviderNotFoundError,
-    ProviderInvalidDataError, ProviderInvalidQueryError, ProviderNoDataError,
-    ProviderQueryError, ProviderItemNotFoundError, ProviderTypeError,
+    ProviderInvalidQueryError, ProviderNoDataError,
+    ProviderQueryError, ProviderTypeError,
     ProviderPreconditionFailed, ProviderRequestEntityTooLargeError)
 
 from pygeoapi.models.cql import CQLModel
@@ -209,7 +211,8 @@ def pre_process(func):
 
 def pre_load_colls(func):
     """
-    Decorator that makes sure the loaded collections in memory are update to date.
+    Decorator that makes sure the loaded collections in memory are update to
+    date.
 
     :param func: decorated function
 
@@ -728,7 +731,8 @@ class APIRequest:
         Reads a geometry or bbox spatial filter from the service end point.
         When a bbox is specified and no geometry is specified, this function
         also converts the bbox (and its crs) to a geometry (and its crs) for
-        convenience. By defaultk, 4326 is returned as the geom-crs and bbox-crs.
+        convenience. By defaultk, 4326 is returned as the
+        geom-crs and bbox-crs.
         This function reads spatial filter information in either GET or POST
          http methods.
         :param method: indicates if the parameter value should be read from GET
@@ -833,7 +837,7 @@ class API:
         # Copy over for the template config (this is something that got added
         # after a rebase of pending PR.. to be investigated..)
         self.tpl_config['resources'] = deepcopy(self.config['resources'])
-        self.tpl_config['server']['url'] = self.base_url  # Same as in the __init__. This new tpl_config needs refactoring! noqa
+        self.tpl_config['server']['url'] = self.base_url  # Same as in the __init__. This new tpl_config needs refactoring!  # noqa
 
         # Keep track of UTC date of last load
         self.last_loaded_resources = datetime.now(timezone.utc)
@@ -874,7 +878,7 @@ class API:
             # Reload the resources
             self.load_resources()
 
-    def on_description_filter_spatially(self, collections, geom_wkt, geom_crs):  #noqa
+    def on_description_filter_spatially(self, collections, geom_wkt, geom_crs):  # noqa
         """
         Overridable function to spatially filter the collections list based on
         a geometry.
@@ -1218,7 +1222,7 @@ class API:
                 'InvalidParameterValue', msg)
 
         # Filter spatially
-        collections = self.on_description_filter_spatially(collections, geom, geom_crs)
+        collections = self.on_description_filter_spatially(collections, geom, geom_crs)  # noqa
 
         if all([dataset is not None, dataset not in collections.keys()]):
             msg = 'Collection not found'
@@ -1624,7 +1628,8 @@ class API:
 
             msg = 'Collection not found'
             return self.get_exception(
-                HTTPStatus.NOT_FOUND, headers, request.format, 'NotFound', msg)
+                HTTPStatus.NOT_FOUND, headers, request.format,
+                'NotFound', msg)
 
         LOGGER.debug('Creating collection queryables')
         try:
@@ -1711,7 +1716,8 @@ class API:
                                                **self.api_headers)
 
         properties = []
-        reserved_fieldnames = ['f', 'lang', 'bbox', 'bbox-crs', 'geom', 'geom-crs',
+        reserved_fieldnames = ['f', 'lang', 'bbox', 'bbox-crs',
+                               'geom', 'geom-crs',
                                'limit', 'offset',
                                'resulttype', 'datetime', 'sortby',
                                'properties', 'skipGeometry', 'q',
@@ -1723,13 +1729,14 @@ class API:
         if dataset not in collections.keys():
             msg = 'Collection not found'
             return self.get_exception(
-                HTTPStatus.NOT_FOUND, headers, request.format, 'NotFound', msg)
+                HTTPStatus.NOT_FOUND, headers, request.format,
+                'NotFound', msg)
 
         LOGGER.debug('Processing query parameters')
 
         LOGGER.debug('Processing offset parameter')
         try:
-            offset = int(request.params.get('offset')) if request.params.get('offset') else 0
+            offset = int(request.params.get('offset')) if request.params.get('offset') else 0  # noqa
             if offset < 0:
                 msg = 'offset value should be positive or zero'
                 return self.get_exception(
@@ -1995,7 +2002,8 @@ class API:
         try:
             content = p.query(offset=offset, limit=limit,
                               resulttype=resulttype, bbox=bbox,
-                              bbox_crs=bbox_crs, geom_wkt=geom, geom_crs=geom_crs,
+                              bbox_crs=bbox_crs, geom_wkt=geom,
+                              geom_crs=geom_crs,
                               datetime_=datetime_, properties=properties,
                               sortby=sortby, skip_geometry=skip_geometry,
                               select_properties=select_properties,
@@ -2014,7 +2022,7 @@ class API:
                 serialized_query_params += '&'
                 serialized_query_params += urllib.parse.quote(k, safe='')
                 serialized_query_params += '='
-                serialized_query_params += urllib.parse.quote(str(v), safe=',')
+                serialized_query_params += urllib.parse.quote(str(v), safe=',')  # noqa
 
         # TODO: translate titles
         uri = f'{self.get_collections_url()}/{dataset}/items'
@@ -2045,15 +2053,17 @@ class API:
                     'href': f'{uri}?offset={prev}{serialized_query_params}'
                 })
 
-        if len(content['features']) == limit:
-            next_ = offset + limit
-            content['links'].append(
-                {
-                    'type': 'application/geo+json',
-                    'rel': 'next',
-                    'title': 'items (next)',
-                    'href': f'{uri}?offset={next_}{serialized_query_params}'
-                })
+        if 'numberMatched' in content:
+            if content['numberMatched'] > (limit + offset):
+                next_ = offset + limit
+                next_href = f'{uri}?offset={next_}{serialized_query_params}'
+                content['links'].append(
+                    {
+                        'type': 'application/geo+json',
+                        'rel': 'next',
+                        'title': 'items (next)',
+                        'href': next_href
+                    })
 
         content['links'].append(
             {
@@ -2405,7 +2415,8 @@ class API:
         try:
             content = p.query(offset=offset, limit=limit,
                               resulttype=resulttype, bbox=bbox,
-                              bbox_crs=bbox_crs, geom_wkt=geom, geom_crs=geom_crs,
+                              bbox_crs=bbox_crs,
+                              geom_wkt=geom, geom_crs=geom_crs,
                               datetime_=datetime_, properties=properties,
                               sortby=sortby,
                               select_properties=select_properties,
@@ -3782,13 +3793,13 @@ class API:
         except ValueError:
             execution_mode = None
 
-        ### NRCAN STUFF BECAUSE WE ARE FORCING ASYNC FOR EXTRACT PROCESS
+        # #### NRCAN STUFF BECAUSE WE ARE FORCING ASYNC FOR EXTRACT PROCESS
         try:
             if 'extract' in self.config['resources']:
                 execution_mode = RequestedProcessExecutionMode('respond-async')
-        except:
+        except:  # noqa
             execution_mode = None
-        ### END NRCAN STUFF
+        # #### END NRCAN STUFF
 
         try:
             LOGGER.debug('Executing process')
@@ -3799,9 +3810,9 @@ class API:
             headers['Location'] = f'{self.base_url}/jobs/{job_id}'
 
             # Depending on the execution mode and output
-            if execution_mode == None and 'error' in outputs and \
+            if execution_mode is None and 'error' in outputs and \
                (isinstance(outputs['error'], ProviderPreconditionFailed) or \
-                isinstance(outputs['error'], ProviderRequestEntityTooLargeError)):
+                isinstance(outputs['error'], ProviderRequestEntityTooLargeError)):  # noqa
                 raise outputs['error']
 
         except ProviderPreconditionFailed as err:

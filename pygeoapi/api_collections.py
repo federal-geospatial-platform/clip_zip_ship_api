@@ -1,13 +1,13 @@
-import sys, os, json
-import json, ast, yaml, psycopg2
+import yaml
+import psycopg2
 import psycopg2.extras
 from psycopg2 import sql
-from datetime import datetime, timezone
+from datetime import timezone
 
 
 # This is a data structure template for a Postgres provider.
-postgres_template=\
-'''
+postgres_template = \
+    '''
     type: null
     title:
         en: null
@@ -58,12 +58,12 @@ postgres_template=\
         table: null
         crs: null
         max_area: 1000
-'''
+    '''
 
 
 # This is the data structure template for the rasterio provider.
 rasterio_template =\
-'''
+    '''
     type: null
     title:
         en: null
@@ -109,21 +109,22 @@ rasterio_template =\
             mimetype:
         crs: null
         max_extract_area: 1000
-'''
+    '''
 
 
-# This is a dictionary that is used to select different data structure with different table.
+# This is a dictionary that is used to select different data structure with
+# different table.
 tableTemplateDict = {
         "feature": postgres_template,
-        #"pygeoapi_wfs_collection_info": wfs_template,
+        # "pygeoapi_wfs_collection_info": wfs_template,
         "coverage": rasterio_template
     }
 
 
-
 def load_template_common(itemvalue, template, data):
     """
-    This function fills the common information for a collection (whether Feature or Coverage types).
+    This function fills the common information for a collection
+    (whether Feature or Coverage types).
 
     Parameters
     ----------
@@ -136,7 +137,8 @@ def load_template_common(itemvalue, template, data):
 
     Returns
     -------
-        A dictionary of dictionaries. The key is the collection name of the record in the database. The value is a dictionary of the record.
+        A dictionary of dictionaries. The key is the collection name of the
+        record in the database. The value is a dictionary of the record.
     """
 
     itemvalue["type"] = data["collection_type"]
@@ -150,7 +152,7 @@ def load_template_common(itemvalue, template, data):
     itemvalue["theme"]["fr"] = data["collection_theme_fr"]
     itemvalue["short_name"] = data["collection_short_name"]
     itemvalue["org_schema"] = data["collection_org_schema"]
-    #itemvalue["wkt"] = data["wkt"]
+    # itemvalue["wkt"] = data["wkt"]
     itemvalue["description"]["en"] = data["collection_description_en"]
     itemvalue["description"]["fr"] = data["collection_description_fr"]
     itemvalue["keywords"]["en"] = data["collection_keywords_en"]
@@ -170,7 +172,8 @@ def load_template_common(itemvalue, template, data):
 
 def load_template_postgres(template, data):
     """
-    This function takes a template and a list of records and returns a dictionary of the template filled with the records
+    This function takes a template and a list of records and returns a
+    dictionary of the template filled with the records
 
     Parameters
     ----------
@@ -181,7 +184,8 @@ def load_template_postgres(template, data):
 
     Returns
     -------
-        A dictionary of dictionaries. The key is the collection name of the record in the database. The value is a dictionary of the record.
+        A dictionary of dictionaries. The key is the collection name of the
+        record in the database. The value is a dictionary of the record.
     """
 
     itemvalue = yaml.load(template, Loader=yaml.FullLoader)
@@ -199,7 +203,8 @@ def load_template_postgres(template, data):
 
 def load_template_rasterio(template, data):
     """
-    The function takes a template and a list of records and returns a dictionary of records
+    The function takes a template and a list of records and returns a
+    dictionary of records
 
     Parameters
     ----------
@@ -210,7 +215,8 @@ def load_template_rasterio(template, data):
 
     Returns
     -------
-        A dictionary of dictionaries. The key is the collection name of the record in the database. The value is a dictionary of the record.
+        A dictionary of dictionaries. The key is the collection name of
+        the record in the database. The value is a dictionary of the record.
     """
 
     itemvalue = yaml.load(template, Loader=yaml.FullLoader)
@@ -219,28 +225,29 @@ def load_template_rasterio(template, data):
     itemvalue["extents"]["temporal"]["end"] = data["extents_temporal_end"]
     itemvalue["providers"][0]["data"] = data["data"]
 
-    #if data[16] != None:
-        #itemvalue["providers"][0]["options"] = json.loads(data[16].replace("'",'"'))
-    if data["format_name"] != None:
+    # if data[16] != None:
+        # itemvalue["providers"][0]["options"] = json.loads(data[16].replace("'",'"')) # noqa
+    if data["format_name"] is not None:
         itemvalue["providers"][0]["format"]["name"] = data["format_name"]
-        itemvalue["providers"][0]["format"]["mimetype"] = data["format_mimetype"]
+        itemvalue["providers"][0]["format"]["mimetype"] = data["format_mimetype"] # noqa
     return itemvalue
 
 
-def query_collections(conn, polygon_wkt: str, projection_id: int, projection_id_data: int):
+def query_collections(conn, polygon_wkt: str, projection_id: int,
+                      projection_id_data: int):
 
     # Open a cursor
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         # Query filter query
-        spatial_filter = f"ST_Intersects(GEOM, ST_Transform(ST_MakeValid(ST_GeomFromText('{polygon_wkt}', {projection_id}))," + str(projection_id_data) + "))"
+        spatial_filter = f"ST_Intersects(GEOM, ST_Transform(ST_MakeValid(ST_GeomFromText('{polygon_wkt}', {projection_id}))," + str(projection_id_data) + "))"  # noqa
 
         # SQL query
-        sql_query = "SELECT * FROM {table} WHERE {spatial_filter} ORDER BY {field_coll_name}"
+        sql_query = "SELECT * FROM {table} WHERE {spatial_filter} ORDER BY {field_coll_name}"  # noqa
 
         # Execute a statement
-        cur.execute(sql.SQL(sql_query).format(table=sql.Identifier(conn.info.dbname, "czs_collection"),
-                                              spatial_filter=sql.SQL(spatial_filter),
-                                              field_coll_name=sql.Identifier("collection_name")))
+        cur.execute(sql.SQL(sql_query).format(table=sql.Identifier(conn.info.dbname, "czs_collection"),  # noqa
+                                              spatial_filter=sql.SQL(spatial_filter),  # noqa
+                                              field_coll_name=sql.Identifier("collection_name")))  # noqa
 
         # Fetch and return
         return cur.fetchall()
@@ -248,7 +255,8 @@ def query_collections(conn, polygon_wkt: str, projection_id: int, projection_id_
 
 def fetch_collections(conn):
     """
-    Fetches the collection information from the table. When no record, then return [].
+    Fetches the collection information from the table.
+    When no record, then return [].
     Parameters
     ----------
     configFile
@@ -265,21 +273,21 @@ def fetch_collections(conn):
         sql_query = "SELECT * FROM {table_coll} ORDER BY {order_field}"
 
         # Execute statement
-        cur.execute(sql.SQL(sql_query).format(table_coll=sql.Identifier(conn.info.dbname, "v_czs_collections"),
-                                              order_field=sql.Identifier("collection_uuid")))
+        cur.execute(sql.SQL(sql_query).format(table_coll=sql.Identifier(conn.info.dbname, "v_czs_collections"),  # noqa
+                                              order_field=sql.Identifier("collection_uuid")))  # noqa
 
         # Fetch and return
         return cur.fetchall()
 
 
 def get_wkt_collection(conn, collection_name):
-    
+
     # Open a cursor
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         # Select query
-        cur.execute(sql.SQL("SELECT ST_AsText(geom) as wkt FROM {table_coll} WHERE {collection_name} = %s").format(
+        cur.execute(sql.SQL("SELECT ST_AsText(geom) as wkt FROM {table_coll} WHERE {collection_name} = %s").format(  # noqa
             table_coll=sql.Identifier(conn.info.dbname, "czs_collection"),
-            collection_name=sql.Identifier("collection_name")), (collection_name,))
+            collection_name=sql.Identifier("collection_name")), (collection_name,))  # noqa
 
         # Fetch and return
         return cur.fetchone()["wkt"]
@@ -290,7 +298,7 @@ def get_flag_reload_resources(conn):
     # Open a cursor
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         # Select query
-        cur.execute(sql.SQL("SELECT {field_date_must_load} FROM {table}").format(
+        cur.execute(sql.SQL("SELECT {field_date_must_load} FROM {table}").format(  # noqa
             table=sql.Identifier(conn.info.dbname, "czs_collection_loaded"),
             field_date_must_load=sql.Identifier("date_must_load")))
 
@@ -303,7 +311,7 @@ def update_flag_reload_resources(conn, the_date):
     # Open a cursor
     with conn.cursor() as cur:
         # Query to update the flag
-        query = sql.SQL("UPDATE {table} SET {field_date_must_load} = %s").format(
+        query = sql.SQL("UPDATE {table} SET {field_date_must_load} = %s").format(  # noqa
             table=sql.Identifier(conn.info.dbname, "czs_collection_loaded"),
             field_date_must_load=sql.Identifier("date_must_load"))
 

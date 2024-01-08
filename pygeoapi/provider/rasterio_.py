@@ -165,7 +165,7 @@ class RasterioProvider(BaseProvider):
         return rangetype
 
     def query(self, properties=[], subsets={}, bbox=None, bbox_crs=4326,
-              geom=None, geom_crs: int=4326, out_crs: int=None,
+              geom=None, geom_crs: int = 4326, out_crs: int = None,
               datetime_=None, format_='json', **kwargs):
         """
         Extract data from collection
@@ -193,7 +193,7 @@ class RasterioProvider(BaseProvider):
         if not bbox:
             bbox = []
 
-        if all([not bands, not subsets, not bbox, not geom, format_ != 'json']):
+        if all([not bands, not subsets, not bbox, not geom, format_ != 'json']):  # noqa
             LOGGER.debug('No parameters specified, returning native data')
             return read_data(self.data)
 
@@ -227,14 +227,14 @@ class RasterioProvider(BaseProvider):
 
                 # shapely<2.0, sample code not working in shapely<2.0 :(
                 # Transform
-                #import pyproj
-                #from functools import partial # (import this to try it..)
-                #project = partial(pyproj.transform, crs_src.to_string(), crs_dest.to_string())
-                #shapes = shapely.ops.transform(project, shapes)
+                # import pyproj
+                # from functools import partial # (import this to try it..)
+                # project = partial(pyproj.transform, crs_src.to_string(), crs_dest.to_string())  # noqa
+                # shapes = shapely.ops.transform(project, shapes)
 
                 # shapely>2.0
                 # Transform
-                project = Transformer.from_crs(crs_src, crs_dest, always_xy=True)
+                project = Transformer.from_crs(crs_src, crs_dest, always_xy=True)  # noqa
                 shapes = shapely.ops.transform(project.transform, shapes)
 
                 # Store the bbox representation for rasterio's ouput
@@ -386,23 +386,23 @@ class RasterioProvider(BaseProvider):
                         # Create destination memory file
                         with MemoryFile() as memfile_proj:
                             # Reproject
-                            self.reproject_data_to_memory_file(dest, memfile_proj, out_crs, kwargs['compression'])
+                            self.reproject_data_to_memory_file(dest, memfile_proj, out_crs, kwargs['compression'])  # noqa
 
                             # Return the reprojected image
                             return memfile_proj.read()
 
             else:
                 # Use a single memory file and return as is
-                LOGGER.debug('Returning data in native format and native projection')
+                LOGGER.debug('Returning data in native format and native projection')  # noqa
                 with MemoryFile() as memfile:
                     with memfile.open(**out_meta) as dest:
                         dest.write(out_image)
                     return memfile.read()
 
-    def reproject_data_to_memory_file(self, dataset_src, memoryfile_dest: MemoryFile, out_crs: int, compression: str):
+    def reproject_data_to_memory_file(self, dataset_src, memoryfile_dest: MemoryFile, out_crs: int, compression: str):  # noqa
         # Create the CRS
         crs = CRS.from_epsg(out_crs)
-        transform, width, height = calculate_default_transform(dataset_src.crs, crs, dataset_src.width, dataset_src.height, *dataset_src.bounds)
+        transform, width, height = calculate_default_transform(dataset_src.crs, crs, dataset_src.width, dataset_src.height, *dataset_src.bounds)  # noqa
         out_meta = dataset_src.meta.copy()
 
         update_params = {
