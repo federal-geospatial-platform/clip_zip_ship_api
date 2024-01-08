@@ -1169,6 +1169,7 @@ class API:
     @gzip
     @pre_process
     @jsonldify
+    @pre_load_colls
     def post_describe_collections(self, request: Union[APIRequest, Any],
                                   dataset=None) -> Tuple[dict, int, str]:
         """
@@ -1184,8 +1185,7 @@ class API:
         # specifying the POST method was used
         return self.describe_collections(request, dataset, "POST")
 
-    def describe_collections(self, request: APIRequest,
-                             dataset=None, method=str) -> Tuple[dict, int, str]:  # noqa
+    def describe_collections(self, request, dataset=None, method=str) -> Tuple[dict, int, str]:  # noqa
         """
         Provide collection metadata
 
