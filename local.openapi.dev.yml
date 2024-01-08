@@ -29,7 +29,7 @@ info:
     url: https://creativecommons.org/licenses/by/4.0/
   termsOfService: https://creativecommons.org/licenses/by/4.0/
   title: PyGeoAPI for NRCan collections
-  version: 0.2.2
+  version: v0.2.5
   x-keywords:
   - geospatial
   - data
@@ -390,7 +390,8 @@ components:
 paths:
   /:
     get:
-      description: Landing page
+      summary: Landing page. // Page principale.
+      description: Landing page. // Page principale.
       operationId: getLandingPage
       parameters:
       - $ref: "#/components/parameters/f"
@@ -402,12 +403,13 @@ paths:
           $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/InvalidParameter
         '500':
           $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/ServerError
-      summary: Landing page
       tags:
       - server
   /collections:
     get:
-      description: Queries the collections. Provide a bbox or geometry to spatially filter the collections on a region
+      summary: Collections. // Collections.
+      description: Queries the collections. Provide a bbox or geometry to spatially filter the collections on a region.
+                   // Interroge les collections. Fournissez une bbox ou une géométrie pour filtrer spatialement les collections sur une région.
       operationId: getCollections
       parameters:
       - $ref: "#/components/parameters/f"
@@ -423,11 +425,12 @@ paths:
           $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/InvalidParameter
         '500':
           $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/ServerError
-      summary: Collections
       tags:
       - collections
     post:
-      description: Queries the collections. Provide a bbox or geometry to spatially filter the collections on a region
+      summary: Collections. // Collections.
+      description: Queries the collections. Provide a bbox or geometry to spatially filter the collections on a region.
+                   // Interroge les collections. Fournissez une bbox ou une géométrie pour filtrer spatialement les collections sur une région.
       operationId: getCollectionsPost
       parameters:
       - $ref: '#/components/parameters/f'
@@ -446,13 +449,12 @@ paths:
           $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/InvalidParameter
         '500':
           $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/ServerError
-      summary: Collections
       tags:
       - collections
   /collections/{collectionId}:
     get:
-      summary: Collection information
-      description: Gets the information on a given Collection. The Collection default provider must be of type "feature".
+      summary: Collection information. // Information sur la Collection.
+      description: Gets the information on a given Collection. // Obtient l'information sur la Collection.
       operationId: getCollection
       parameters:
       - "$ref": "#/components/parameters/collectionId"
@@ -471,8 +473,9 @@ paths:
       - collections
   /collections/{collectionId}/items:
     get:
-      summary: List items
+      summary: List items in the Collection. // Liste les enregistrements dans la Collection.
       description: Gets a list of items in the given Collection. The Collection default provider must be of type "feature".
+                   // Obtient une liste d’éléments dans la collection donnée. Le fournisseur par défaut de la collection doit être de type « feature ».
       operationId: getCollectionItems
       parameters:
       - "$ref": "#/components/parameters/collectionId"
@@ -608,8 +611,9 @@ paths:
       tags:
       - collections
     post:
-      summary: List items
+      summary: List items in the Collection. // Liste les enregistrements dans la Collection.
       description: Gets a list of items in the given Collection. The Collection default provider must be of type "feature".
+                   // Obtient une liste d’éléments dans la collection donnée. Le fournisseur par défaut de la collection doit être de type « feature ».
       operationId: getCollectionItemsPost
       parameters:
       - "$ref": "#/components/parameters/collectionId"
@@ -746,8 +750,9 @@ paths:
       - collections
   /collections/{collectionId}/items/{featureId}:
     get:
-      summary: Specific Feature in a Collection
+      summary: Specific Feature in a Collection. // Enregistrement spécifique dans une Collection.
       description: Gets a specific Feature in the given Collection. The Collection default provider must be of type "feature".
+                   // Obtient une fonctionnalité spécifique dans la collection donnée. Le fournisseur par défaut de la collection doit être de type « feature ».
       operationId: getCollectionItem
       parameters:
       - "$ref": "#/components/parameters/collectionId"
@@ -767,8 +772,9 @@ paths:
       - collections
   /collections/{collectionId}/queryables:
     get:
-      summary: Information on Queryables
+      summary: Information on Queryables. // Informations sur les Queryables.
       description: Gets the Queryables information for the given Collection. The Collection default provider must be of type "feature".
+                   // Obtient les informations Queryables pour la collection donnée. Le fournisseur par défaut de la collection doit être de type « feature ».
       operationId: getCollectionQueryables
       parameters:
       - "$ref": "#/components/parameters/collectionId"
@@ -808,8 +814,9 @@ paths:
       - collections
   /collections/{collectionId}/coverage:
     get:
-      summary: Get Coverage
+      summary: Get Coverage for raster collections. // Obtient la couverture pour les collections matricielles.
       description: Gets the Coverage information for the given Collection. The Collection default provider must be of type "coverage".
+                   // Obtient les informations de couverture pour la collection donnée. Le fournisseur par défaut de Collection doit être de type « couverture ».
       operationId: getCollectionCoverage
       parameters:
       - $ref: "#/components/parameters/collectionIdCoverage"
@@ -860,8 +867,9 @@ paths:
       - collections
   /collections/{collectionId}/coverage/domainset:
     get:
-      summary: Get Coverage Domain Set
+      summary: Get Coverage Domain Set. // Obtient un ensemble de domaines de couverture.
       description: Gets the Coverage Domain Set for the given Collection. The Collection default provider must be of type "coverage".
+                   // Obtient l'ensemble de domaines de couverture pour la collection donnée. Le fournisseur par défaut de Collection doit être de type « couverture ».
       operationId: getCollectionCoverageDomainSet
       parameters:
       - "$ref": "#/components/parameters/collectionIdCoverage"
@@ -908,8 +916,9 @@ paths:
       - collections
   /collections/{collectionId}/coverage/rangetype:
     get:
-      summary: Get Coverage Range Type
+      summary: Get Coverage Range Type. // Obtient le type de plage de couverture.
       description: Gets the Coverage Range Type for the given Collection. The Collection default provider must be of type "coverage".
+                   // Obtient le type de plage de couverture pour la collection donnée. Le fournisseur par défaut de Collection doit être de type « couverture ».
       operationId: getCollectionCoverageRangeType
       parameters:
       - "$ref": "#/components/parameters/collectionIdCoverage"
@@ -956,8 +965,8 @@ paths:
       - collections
   /conformance:
     get:
-      summary: API conformance definition
-      description: API conformance definition
+      summary: API conformance definition. // La définition de conformité de cet API.
+      description: API conformance definition. // La définition de conformité de cet API.
       operationId: getConformanceDeclaration
       parameters:
       - $ref: '#/components/parameters/f'
@@ -973,8 +982,8 @@ paths:
       - server
   /openapi:
     get:
-      summary: This document
-      description: This document
+      summary: This document. // Ce document.
+      description: This document. // Ce document.
       operationId: getOpenapi
       parameters:
       - $ref: '#/components/parameters/f'
@@ -1003,8 +1012,8 @@ paths:
 
   /reload_resources:
     get:
-      summary: Reloads the resources collections from the database
-      description: Reloads the resources collections from the database
+      summary: Reloads the resources collections from the database. // Recharge les collections à partir de la base de données.
+      description: Reloads the resources collections from the database. // Recharge les collections à partir de la base de données.
       operationId: getReloadResources
       responses:
         default:
@@ -1047,8 +1056,10 @@ paths:
   #     - process
   /processes/extract/execution:
     post:
+      summary: Process Extract execution. // Démarre une tâche d'extraction.
       description: Extracts data from the provided collection names and geometry. Can also reproject the result in a given output crs.
-        Supported EPSG values are 3857, 3978, 3979, 4269, 4326, 4617.
+        Supported EPSG values are 3857, 3978, 3979, 4269, 4326, 4617. // Extrait les données des noms de collection et de la géométrie fournis.
+        Peut également reprojeter le résultat dans un crs de sortie donné. Les valeurs EPSG prises en charge sont 3857, 3978, 3979, 4269, 4326, 4617.
       operationId: executeExtractJob
       requestBody:
         content:
@@ -1066,12 +1077,11 @@ paths:
           $ref: https://schemas.opengis.net/ogcapi/processes/part1/1.0/openapi/responses/ServerError.yaml
         default:
           $ref: '#/components/responses/default'
-      summary: Process Extract execution
       tags:
       - process
   /jobs:
     get:
-      summary: Gets all Jobs
+      summary: Gets all Jobs. // Retourne les tâches.
       description: Gets all Jobs
       operationId: getJobs
       parameters:
@@ -1085,8 +1095,8 @@ paths:
       - process
   /jobs/{jobId}:
     get:
-      summary: Gets status information on a particular Job
-      description: Gets status information on a particular Job
+      summary: Gets status information on a particular Job. // Obtient des informations sur l'état d'une tâche particulière.
+      description: Gets status information on a particular Job. // Obtient des informations sur l'état d'une tâche particulière.
       operationId: getJobInfoById
       parameters:
       - $ref: '#/components/parameters/f'
@@ -1099,8 +1109,8 @@ paths:
       tags:
       - process
     delete:
-      summary: Deletes a particular Job
-      description: Deletes a particular Job
+      summary: Deletes a particular Job. // Supprime une tâche.
+      description: Deletes a particular Job. // Supprime une tâche.
       operationId: deleteJobById
       parameters:
       - $ref: '#/components/parameters/f'
@@ -1114,8 +1124,8 @@ paths:
       - process
   /jobs/{jobId}/results:
     get:
-      summary: Gets results of a particular Job
-      description: Gets results of a particular Job
+      summary: Gets results of a particular Job. // Retourne les résultats sur une tâche particulière.
+      description: Gets results of a particular Job. // Retourne les résultats sur une tâche particulière.
       operationId: getJobResultsById
       parameters:
       - $ref: '#/components/parameters/f'
