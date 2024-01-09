@@ -213,7 +213,7 @@ class RasterioProvider(BaseProvider):
             if self.options and 'crs' in self.options:
                 crs_dest = CRS.from_string(self.options['crs'])
             else:
-                crs_dest = CRS.from_epsg(self._data.crs.to_epsg())
+                crs_dest = self._data.crs
 
             if crs_src == crs_dest:
                 LOGGER.debug('source geom CRS and data CRS are the same')
@@ -254,7 +254,7 @@ class RasterioProvider(BaseProvider):
             if self.options and 'crs' in self.options:
                 crs_dest = CRS.from_string(self.options['crs'])
             else:
-                crs_dest = CRS.from_epsg(self._data.crs.to_epsg())
+                crs_dest = self._data.crs
 
             if crs_src == crs_dest:
                 LOGGER.debug('source bbox CRS and data CRS are the same')

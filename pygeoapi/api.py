@@ -1185,7 +1185,11 @@ class API:
         # specifying the POST method was used
         return self.describe_collections(request, dataset, "POST")
 
-    def describe_collections(self, request, dataset=None, method=str) -> Tuple[dict, int, str]:  # noqa
+    @gzip
+    @pre_process
+    @jsonldify
+    def describe_collections(self, request: Union[APIRequest, Any],
+                             dataset=None, method=str) -> Tuple[dict, int, str]:  # noqa
         """
         Provide collection metadata
 

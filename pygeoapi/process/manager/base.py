@@ -353,11 +353,11 @@ class BaseManager:
 
                 else:
                     code = 'InvalidParameterValue'
-                    description = 'Error processing job'
+                    description = 'Error updating job'
 
                 outputs = {
                     'code': code,
-                    'error': err,
+                    # 'error': err,
                     'description': description
                 }
 

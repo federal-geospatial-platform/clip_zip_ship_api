@@ -20,11 +20,9 @@ server:
     ogc_schemas_location: http://schemas.opengis.net
 
     manager:
-        name: PostgresDB
-        max_concurrent: 0
-        max_queue: 0
-        result_in_db: true
-        internal_error_in_db: true
+        name: TinyDB
+        connection: /tmp/pygeoapi-test-process-manager.db
+        output_dir: /tmp
 
 logging:
     level: INFO
@@ -107,3 +105,13 @@ resources:
               geometry:
                   x_field: long
                   y_field: lat
+
+    hello-world:
+        type: process
+        processor:
+            name: HelloWorld
+
+    pygeometa-metadata-validate:
+        type: process
+        processor:
+            name: pygeometa.pygeoapi_plugin.PygeometaMetadataValidateProcessor

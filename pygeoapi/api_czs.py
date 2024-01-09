@@ -47,6 +47,12 @@ class API_CZS(API):
         self.config["settings"]["s3"] = aws_secrets["s3"]
 
         # Set the manager config on-the-fly as well
+        self.config["server"]["manager"] = {}
+        self.config["server"]["manager"]["name"] = "PostgresDB"
+        self.config["server"]["manager"]["max_concurrent"] = 0
+        self.config["server"]["manager"]["max_queue"] = 0
+        self.config["server"]["manager"]["result_in_db"] = True
+        self.config["server"]["manager"]["internal_error_in_db"] = True
         self.config["server"]["manager"]["connection"] = {}
         self.config["server"]["manager"]["connection"]["host"] = aws_secrets["database"]["host"]  # noqa
         self.config["server"]["manager"]["connection"]["port"] = aws_secrets["database"]["port"]  # noqa
